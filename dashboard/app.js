@@ -289,6 +289,8 @@ const BREADCRUMBS = {
   dashboard: 'Dashboard',
   streams:   'Live Streams',
   health:    'Health Monitor',
+  streams:   'Live Streams',
+  viewer:    '🌐 Public Viewer',
   keys:      'Stream Keys',
   logs:      'Live Logs',
   checklist: 'Event Checklist',
@@ -975,3 +977,65 @@ function capitalize(str) {
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// ═══════════════════════════════════════════════════════════
+// PUBLIC VIEWER TAB
+// ═══════════════════════════════════════════════════════════
+function initViewerTab() {
+  const ip = STATE.serverIp === '[SERVER_IP]' ? '[SERVER_IP]' : STATE.serverIp;
+  const viewerUrl = `http://${ip}/watch`;
+  const hlsUrl    = `http://${ip}/hls/stream/index.m3u8`;
+
+  setEl('viewerPublicUrl', viewerUrl);
+  setEl('viewerHlsUrl',    hlsUrl);
+
+  // Load saved config into form fields
+  const f = (id) => document.getElementById(id);
+  if (f('vcEventName')) f('vcEventName').value = localStorage.getItem('sv_eventName') || '';
+  if (f('vcOrgName'))   f('vcOrgName').value   = localStorage.getItem('sv_orgName')   || '';
+  if (f('vcEventDate')) f('vcEventDate').value  = localStorage.getItem('sv_eventDate') || '';
+
+  checkHlsStatus();
+}
+
+function saveViewerConfig() {
+  const name = document.getElementById('vcEventName')?.value.trim() || '';
+  const org  = document.getElementById('vcOrgName')?.value.trim()   || '';
+  const date = document.getElementById('vcEventDate')?.value.trim() || '';
+  localStorage.setItem('sv_eventName', name);
+  localStorage.setItem('sv_orgName',   org);
+  localStorage.setItem('sv_eventDate', date);
+  showToast('✅ Viewer config saved — viewer page will show updated info', 'success');
+  appendLog('nginx', 'info', `[INFO] Viewer config updated: "${name}" — ${org}`);
+}
+
+function copyViewerUrl() {
+  const el = document.getElementById('viewerPublicUrl');
+  if (el) copyToClipboard(el.textContent);
+}
+
+function copyHlsUrl() {
+  const el = document.getElementById('viewerHlsUrl');
+  if (el) copyToClipboard(el.textContent);
+}
+
+function openViewer() {
+  const el = document.getElementById('viewerPublicUrl');
+  if (el) window.open(el.textContent, '_blank');
+}
+
+function checkHlsStatus() {
+  const running = STATE.relayRunning;
+  setBadge('hlsSegStatus',     running ? 'ACTIVE' : 'No Stream', running ? 'success' : 'warning');
+  setBadge('hlsPort80',        running ? 'OPEN' : 'Check UFW',   running ? 'success' : 'warning');
+  setBadge('hlsViewerFiles',   'Deployed', 'success');
+  setBadge('viewerStreamBadge', running ? 'LIVE' : 'OFFLINE', running ? 'success' : 'danger');
+  setEl('hlsSegAge', running ? '~3s (live)' : '— (no stream)');
+}
+
+// Patch switchTab to auto-init viewer tab when navigating to it
+const _origSwitchTab = switchTab;
+window.switchTab = function(tabId) {
+  _origSwitchTab(tabId);
+  if (tabId === 'viewer') setTimeout(initViewerTab, 50);
+};

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title id="pageTitle">Live Stream — Loading...</title>
+  <meta name="description" content="Watch this live event broadcast directly in your browser. No app needed." />
+  <meta property="og:title" content="Live Broadcast" />
+  <meta property="og:description" content="Watch live — Click to join" />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- HLS.js — cross-browser HLS player library (no plugin needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+  <link rel="stylesheet" href="player.css" />
+</head>
+<body>
+
+<!-- ═══ LOADING SCREEN ═══════════════════════════════════════════════ -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-logo">
+    <div class="loading-ring"></div>
+    <div class="loading-ring loading-ring-2"></div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/>
+    </svg>
+  </div>
+  <div class="loading-text">Connecting to live stream...</div>
+</div>
+
+<!-- ═══ OFFLINE SCREEN ════════════════════════════════════════════════ -->
+<div class="offline-screen" id="offlineScreen" style="display:none">
+  <div class="offline-content">
+    <div class="offline-icon">📡</div>
+    <h1 id="offlineTitle">Stream Not Live Yet</h1>
+    <p id="offlineMessage">The broadcast hasn't started yet. This page will automatically connect when the stream goes live.</p>
+
+    <div class="offline-info-card">
+      <div class="offline-info-row">
+        <span class="offline-info-label">🎬 Event</span>
+        <span class="offline-info-value" id="offlineEventName">—</span>
+      </div>
+      <div class="offline-info-row">
+        <span class="offline-info-label">📅 Date</span>
+        <span class="offline-info-value" id="offlineEventDate">—</span>
+      </div>
+      <div class="offline-info-row">
+        <span class="offline-info-label">🔄 Status</span>
+        <span class="offline-info-value offline-checking" id="offlineStatus">
+          <span class="dot-blink"></span> Checking every 10 seconds...
+        </span>
+      </div>
+    </div>
+
+    <div class="share-row">
+      <span class="share-label">Share this page:</span>
+      <button class="share-btn" onclick="copyPageUrl()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+        Copy Link
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PLAYER SCREEN ════════════════════════════════════════════════ -->
+<div class="player-screen" id="playerScreen" style="display:none">
+
+  <!-- Top bar — event branding -->
+  <div class="player-topbar" id="playerTopbar">
+    <div class="topbar-left">
+      <div class="live-pill">
+        <span class="live-dot"></span>
+        LIVE
+      </div>
+      <div class="event-info">
+        <div class="event-name" id="playerEventName">Live Broadcast</div>
+        <div class="event-sub" id="playerOrg">Loading...</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="viewer-count" id="viewerCount">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        <span id="viewerCountNum">—</span> watching
+      </div>
+      <button class="topbar-btn" id="fullscreenBtn" onclick="toggleFullscreen()" title="Fullscreen">
+        <svg id="fsIconExpand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        <svg id="fsIconCollapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"/></svg>
+      </button>
+      <button class="topbar-btn" onclick="copyPageUrl()" title="Share">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main video element -->
+  <div class="video-wrap" id="videoWrap">
+    <video id="liveVideo" playsinline autoplay muted></video>
+
+    <!-- Loading overlay shown while buffering -->
+    <div class="video-buffer-overlay" id="bufferOverlay">
+      <div class="buffer-spinner"></div>
+      <div class="buffer-text">Buffering stream...</div>
+    </div>
+
+    <!-- Click to unmute overlay -->
+    <div class="unmute-overlay" id="unmuteOverlay" onclick="unmute()" style="display:none">
+      <div class="unmute-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.5a1.5 1.5 0 01-1.5-1.5V10.5a1.5 1.5 0 011.5-1.5h2.25z"/></svg>
+        <span>Tap to unmute</span>
+      </div>
+    </div>
+
+    <!-- Stream ended overlay -->
+    <div class="stream-ended-overlay" id="streamEndedOverlay" style="display:none">
+      <div class="ended-content">
+        <div class="ended-icon">🎬</div>
+        <h2>Broadcast Ended</h2>
+        <p>Thank you for watching!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom control bar -->
+  <div class="player-controls" id="playerControls">
+    <div class="controls-left">
+      <!-- Mute toggle -->
+      <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()">
+        <svg id="muteIconOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.536 8.464a5 5 0 010 7.072M12 6.5v11m0 0l-3.5-3.5H5a1 1 0 01-1-1v-3a1 1 0 011-1h3.5L12 6.5z"/></svg>
+        <svg id="muteIconOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.5a1.5 1.5 0 01-1.5-1.5V10.5a1.5 1.5 0 011.5-1.5h2.25z"/></svg>
+      </button>
+      <!-- Volume slider -->
+      <input class="volume-slider" type="range" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)" id="volumeSlider" />
+      <!-- Stream latency indicator -->
+      <div class="latency-tag" id="latencyTag">— s delay</div>
+    </div>
+    <div class="controls-right">
+      <button class="ctrl-btn quality-btn" id="qualityBtn" onclick="seekToLive()" title="Jump to live edge">
+        <span class="quality-dot"></span> LIVE
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ════════════════════════════════════════════════════════ -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ═══ CONFIG (SET BY ADMIN via StreamOps Dashboard) ══════════════════ -->
+<script>
+  // These values are configured from the StreamOps dashboard
+  // They are stored in localStorage and read here
+  const STREAM_CONFIG = {
+    hlsUrl     : '/hls/stream/index.m3u8',
+    statusApi  : '/api/status',
+    eventName  : localStorage.getItem('sv_eventName')  || 'Live Broadcast',
+    orgName    : localStorage.getItem('sv_orgName')    || '',
+    eventDate  : localStorage.getItem('sv_eventDate')  || '',
+    pollInterval: 10000,   // Check stream status every 10 seconds
+  };
+</script>
+<script src="player.js"></script>
+
+</body>
+</html>

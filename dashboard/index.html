@@ -49,6 +49,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
       Stream Keys
     </li>
+    <li class="nav-item" data-tab="viewer" onclick="switchTab('viewer')" id="navViewer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      Public Viewer
+    </li>
     <li class="nav-item" data-tab="logs" onclick="switchTab('logs')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       Live Logs
@@ -382,6 +386,7 @@
         <thead><tr><th>Port</th><th>Protocol</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
         <tbody id="portTableBody">
           <tr><td>1935</td><td>TCP</td><td>RTMP Ingress from OBS</td><td><span class="badge" id="port1935Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(1935)">Test</button></td></tr>
+          <tr><td>80</td><td>TCP</td><td>Public HLS Viewer (NEW)</td><td><span class="badge" id="port80Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(80)">Test</button></td></tr>
           <tr><td>8080</td><td>TCP</td><td>Nginx Stat/Health Page</td><td><span class="badge" id="port8080Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(8080)">Test</button></td></tr>
           <tr><td>22</td><td>TCP</td><td>SSH Management</td><td><span class="badge success">Secure</span></td><td>—</td></tr>
           <tr><td>1936</td><td>TCP</td><td>Local FFmpeg fbsink</td><td><span class="badge" id="port1936Badge">Internal</span></td><td>—</td></tr>
@@ -602,6 +607,132 @@
         <div class="qr-item">
           <div class="qr-label">Watch All Logs</div>
           <code>sudo tail -f /var/log/nginx/error.log</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: PUBLIC VIEWER ══════════ -->
+  <div class="tab-content" id="tab-viewer">
+    <div class="page-header">
+      <h1>🌐 Public Live Viewer</h1>
+      <p>Share a direct browser link — viewers watch live without YouTube or Facebook account</p>
+    </div>
+
+    <!-- Shareable URL Card -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <h2>📎 Shareable Viewer URL</h2>
+        <div class="card-actions">
+          <span class="badge" id="viewerStreamBadge">CHECKING</span>
+        </div>
+      </div>
+      <div style="padding:22px">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:0.9rem;color:#86efac;word-break:break-all" id="viewerPublicUrl">http://[SERVER_IP]/watch</code>
+          <button class="btn-sm btn-primary" onclick="copyViewerUrl()">⎘ Copy Link</button>
+          <button class="btn-sm btn-outline" onclick="openViewer()" id="btnOpenViewer">↗ Open</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-family:var(--mono);font-size:0.78rem;color:#7dd3fc;word-break:break-all" id="viewerHlsUrl">http://[SERVER_IP]/hls/stream/index.m3u8</code>
+          <button class="btn-xs" onclick="copyHlsUrl()">VLC URL</button>
+        </div>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:10px">📱 Share via WhatsApp, SMS, or email — works in any browser on any device. No app install needed.</p>
+      </div>
+    </div>
+
+    <!-- Event Info Config & HLS Status Grid -->
+    <div class="dashboard-grid" style="margin-bottom:20px">
+
+      <!-- Event Config -->
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 Event Info (shown on viewer page)</h2>
+          <div class="card-actions"><button class="btn-sm btn-primary" onclick="saveViewerConfig()">Save</button></div>
+        </div>
+        <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+          <div>
+            <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Event Name</label>
+            <input type="text" id="vcEventName" placeholder="e.g. Republic Day Parade 2026 — UP Police"
+              style="width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:0.85rem;outline:none;transition:border-color 0.2s"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Organisation / Unit</label>
+            <input type="text" id="vcOrgName" placeholder="e.g. 25 Bn PAC, Lucknow"
+              style="width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:0.85rem;outline:none;transition:border-color 0.2s"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Event Date</label>
+            <input type="text" id="vcEventDate" placeholder="e.g. 26 January 2026, 6:00 AM"
+              style="width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:0.85rem;outline:none;transition:border-color 0.2s"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted)">These values are pushed to the viewer page via URL query params and localStorage.</p>
+        </div>
+      </div>
+
+      <!-- HLS Status -->
+      <div class="card">
+        <div class="card-header">
+          <h2>📡 HLS Stream Status</h2>
+          <div class="card-actions"><button class="btn-sm btn-outline" onclick="checkHlsStatus()">Refresh</button></div>
+        </div>
+        <div style="padding:18px">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
+              <span style="color:var(--text-muted)">HLS Segments</span>
+              <span id="hlsSegStatus" class="badge">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
+              <span style="color:var(--text-muted)">Segment Age</span>
+              <span id="hlsSegAge" style="font-family:var(--mono)">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
+              <span style="color:var(--text-muted)">Port 80</span>
+              <span id="hlsPort80" class="badge">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
+              <span style="color:var(--text-muted)">HLS Directory</span>
+              <span style="font-family:var(--mono);font-size:0.75rem;color:var(--text-secondary)">/var/www/html/hls/</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:0.84rem">
+              <span style="color:var(--text-muted)">Viewer Files</span>
+              <span id="hlsViewerFiles" class="badge">—</span>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.25);border-radius:8px;font-size:0.78rem;color:var(--text-muted)">
+            <strong style="color:var(--text-primary)">Shell command to run:</strong><br/>
+            <code style="color:#86efac">sudo bash /opt/streaming-backend/scripts/serve_hls.sh</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="card">
+      <div class="card-header"><h2>ℹ️ How It Works</h2></div>
+      <div style="padding:20px 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+        <div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px">
+          <div style="font-size:1.4rem;margin-bottom:8px">1️⃣</div>
+          <div style="font-weight:700;margin-bottom:6px">OBS Streams to Relay</div>
+          <div style="font-size:0.82rem;color:var(--text-secondary)">OBS sends RTMP stream to Nginx relay on port 1935 as usual.</div>
+        </div>
+        <div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px">
+          <div style="font-size:1.4rem;margin-bottom:8px">2️⃣</div>
+          <div style="font-weight:700;margin-bottom:6px">Nginx Creates HLS Chunks</div>
+          <div style="font-size:0.82rem;color:var(--text-secondary)">Nginx splits stream into 3-second .ts video chunks + .m3u8 playlist automatically.</div>
+        </div>
+        <div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px">
+          <div style="font-size:1.4rem;margin-bottom:8px">3️⃣</div>
+          <div style="font-weight:700;margin-bottom:6px">Browser Plays via HLS.js</div>
+          <div style="font-size:0.82rem;color:var(--text-secondary)">Viewer opens link → HLS.js downloads chunks → seamless live video in any browser.</div>
+        </div>
+        <div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px">
+          <div style="font-size:1.4rem;margin-bottom:8px">4️⃣</div>
+          <div style="font-weight:700;margin-bottom:6px">Share the Link</div>
+          <div style="font-size:0.82rem;color:var(--text-secondary)">Post on WhatsApp group — anyone clicks & watches live. ~5 sec delay. No account needed.</div>
         </div>
       </div>
     </div>
