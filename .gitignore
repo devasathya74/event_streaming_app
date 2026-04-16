@@ -2,9 +2,12 @@
 # =============================================================
 
 # ─── NEVER COMMIT STREAM KEYS ────────────────────────────────
-keys/
+# Allow the keys/ directory itself, but block actual key files
+!keys/
 keys/*.env
 *.env
+# Explicitly allow the safe example template (contains no real keys)
+!keys/stream_keys.env.example
 
 # ─── Log files (can grow large, generated at runtime) ────────
 logs/

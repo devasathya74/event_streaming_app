@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamOps — Live Broadcast Control Center</title>
+  <meta name="description" content="Production live streaming operations dashboard for OBS → YouTube + Facebook relay monitoring, control, and event management." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <span class="logo-title">StreamOps</span>
+      <span class="logo-sub">Broadcast Control</span>
+    </div>
+  </div>
+
+  <div class="sidebar-status">
+    <div class="status-dot" id="sidebarStatusDot"></div>
+    <span id="sidebarStatusText">Checking...</span>
+  </div>
+
+  <ul class="sidebar-nav">
+    <li class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </li>
+    <li class="nav-item" data-tab="streams" onclick="switchTab('streams')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      Live Streams
+    </li>
+    <li class="nav-item" data-tab="health" onclick="switchTab('health')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Health Monitor
+    </li>
+    <li class="nav-item" data-tab="keys" onclick="switchTab('keys')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      Stream Keys
+    </li>
+    <li class="nav-item" data-tab="logs" onclick="switchTab('logs')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Live Logs
+    </li>
+    <li class="nav-item" data-tab="checklist" onclick="switchTab('checklist')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Event Checklist
+    </li>
+    <li class="nav-item" data-tab="emergency" onclick="switchTab('emergency')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Emergency
+    </li>
+    <li class="nav-item" data-tab="docs" onclick="switchTab('docs')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Documentation
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">
+    <div class="uptime-display">
+      <span class="uptime-label">Uptime</span>
+      <span class="uptime-value" id="uptimeDisplay">—</span>
+    </div>
+    <div class="version-tag">v2.0 Production</div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ MAIN CONTENT ═══════════════════════════ -->
+<main class="main-content">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="toggleSidebar()" id="hamburgerBtn">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="breadcrumb" id="breadcrumb">Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="live-clock" id="liveClock"></div>
+      <div class="event-badge" id="eventBadge">
+        <span class="pulse-dot"></span>
+        <span id="eventBadgeText">STANDBY</span>
+      </div>
+      <button class="btn-emergency-stop" id="emergencyStopBtn" onclick="confirmEmergencyStop()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" fill="white"/></svg>
+        STOP ALL
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════ TAB: DASHBOARD ══════════ -->
+  <div class="tab-content active" id="tab-dashboard">
+
+    <!-- Alert Banner -->
+    <div class="alert-banner" id="alertBanner" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      <span id="alertBannerText"></span>
+      <button onclick="document.getElementById('alertBanner').style.display='none'">✕</button>
+    </div>
+
+    <!-- Status Cards Row -->
+    <div class="cards-row">
+      <div class="stat-card" id="card-nginx">
+        <div class="stat-card-icon nginx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Nginx RTMP</div>
+          <div class="stat-card-value" id="nginxStatus">—</div>
+        </div>
+        <div class="stat-card-badge" id="nginxBadge">UNKNOWN</div>
+      </div>
+
+      <div class="stat-card" id="card-ffmpeg">
+        <div class="stat-card-icon ffmpeg-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Facebook Relay</div>
+          <div class="stat-card-value" id="ffmpegStatus">—</div>
+        </div>
+        <div class="stat-card-badge" id="ffmpegBadge">UNKNOWN</div>
+      </div>
+
+      <div class="stat-card" id="card-watchdog">
+        <div class="stat-card-icon watchdog-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Watchdog</div>
+          <div class="stat-card-value" id="watchdogStatus">—</div>
+        </div>
+        <div class="stat-card-badge" id="watchdogBadge">UNKNOWN</div>
+      </div>
+
+      <div class="stat-card" id="card-clients">
+        <div class="stat-card-icon clients-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Active Clients</div>
+          <div class="stat-card-value" id="clientsCount">0</div>
+        </div>
+        <div class="stat-card-badge success">RTMP</div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="dashboard-grid">
+
+      <!-- Stream Pipeline Visualizer -->
+      <div class="card card-wide">
+        <div class="card-header">
+          <h2>Stream Pipeline</h2>
+          <div class="card-actions">
+            <button class="btn-sm btn-success" onclick="startRelay()" id="btnStart">▶ Start Relay</button>
+            <button class="btn-sm btn-danger"  onclick="stopRelay()"  id="btnStop">■ Stop Relay</button>
+          </div>
+        </div>
+        <div class="pipeline">
+          <div class="pipeline-node obs-node" id="pipeOBS">
+            <div class="pipeline-node-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <div class="pipeline-node-label">OBS Studio</div>
+            <div class="pipeline-node-sub" id="obsConnStatus">Not Connected</div>
+          </div>
+
+          <div class="pipeline-arrow" id="arrow1">
+            <div class="arrow-line"></div>
+            <div class="arrow-label">RTMP :1935</div>
+            <div class="arrow-head">→</div>
+          </div>
+
+          <div class="pipeline-node relay-node" id="pipeRelay">
+            <div class="pipeline-node-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <div class="pipeline-node-label">Nginx Relay</div>
+            <div class="pipeline-node-sub" id="relayBitrate">—</div>
+          </div>
+
+          <div class="pipeline-fork">
+            <div class="pipeline-branch">
+              <div class="pipeline-arrow arrow-branch">
+                <div class="arrow-line"></div>
+                <div class="arrow-label">RTMP</div>
+                <div class="arrow-head">→</div>
+              </div>
+              <div class="pipeline-node dest-node yt-node" id="pipeYT">
+                <div class="pipeline-node-icon yt-color">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.95C18.88 4 12 4 12 4s-6.88 0-8.59.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.95C5.12 20 12 20 12 20s6.88 0 8.59-.47a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+                </div>
+                <div class="pipeline-node-label">YouTube Live</div>
+                <div class="pipeline-node-sub" id="ytStatus">—</div>
+              </div>
+            </div>
+
+            <div class="pipeline-branch">
+              <div class="pipeline-arrow arrow-branch">
+                <div class="arrow-line"></div>
+                <div class="arrow-label">RTMPS/TLS</div>
+                <div class="arrow-head">→</div>
+              </div>
+              <div class="pipeline-node dest-node fb-node" id="pipeFB">
+                <div class="pipeline-node-icon fb-color">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                </div>
+                <div class="pipeline-node-label">Facebook Live</div>
+                <div class="pipeline-node-sub" id="fbStatus">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bitrate Meter -->
+      <div class="card">
+        <div class="card-header"><h2>Stream Metrics</h2></div>
+        <div class="metrics-grid">
+          <div class="metric-item">
+            <div class="metric-label">Video Bitrate</div>
+            <div class="metric-value" id="metricBitrate">0 kbps</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="bitrateFill" style="width:0%"></div></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Dropped Frames</div>
+            <div class="metric-value" id="metricDropped">0%</div>
+            <div class="metric-bar"><div class="metric-bar-fill danger-fill" id="droppedFill" style="width:0%"></div></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Connections</div>
+            <div class="metric-value" id="metricConnections">0</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Stream Duration</div>
+            <div class="metric-value" id="metricDuration">00:00:00</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">CPU Usage</div>
+            <div class="metric-value" id="metricCPU">—</div>
+            <div class="metric-bar"><div class="metric-bar-fill warning-fill" id="cpuFill" style="width:0%"></div></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">RAM Free</div>
+            <div class="metric-value" id="metricRAM">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OBS Connection Config -->
+      <div class="card">
+        <div class="card-header"><h2>OBS Connection Config</h2></div>
+        <div class="obs-config">
+          <div class="config-row">
+            <span class="config-label">Service</span>
+            <code class="config-value">Custom...</code>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Server</span>
+            <code class="config-value" id="obsServerUrl">rtmp://[SERVER_IP]:1935/live</code>
+            <button class="copy-btn" onclick="copyText('obsServerUrl')">⎘</button>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Stream Key</span>
+            <code class="config-value">stream</code>
+            <button class="copy-btn" onclick="copyToClipboard('stream')">⎘</button>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Encoder</span>
+            <code class="config-value">x264 · CBR · 2800 kbps</code>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Resolution</span>
+            <code class="config-value">1280×720 · 30fps</code>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Keyframe</span>
+            <code class="config-value">2 seconds (required)</code>
+          </div>
+          <div class="server-ip-input">
+            <input type="text" id="serverIpInput" placeholder="Enter relay server IP..." />
+            <button class="btn-sm btn-primary" onclick="setServerIp()">Set IP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card">
+        <div class="card-header"><h2>Quick Actions</h2></div>
+        <div class="quick-actions">
+          <button class="action-btn" onclick="runHealthCheck()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Run Health Check
+          </button>
+          <button class="action-btn" onclick="reloadNginx()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.48"/></svg>
+            Reload Nginx
+          </button>
+          <button class="action-btn" onclick="restartFBRelay()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            Restart FB Relay
+          </button>
+          <button class="action-btn" onclick="switchTab('checklist')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Event Checklist
+          </button>
+          <button class="action-btn" onclick="switchTab('logs')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+            View Logs
+          </button>
+          <button class="action-btn" onclick="switchTab('emergency')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            Emergency Guide
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: STREAMS ══════════ -->
+  <div class="tab-content" id="tab-streams">
+    <div class="page-header">
+      <h1>Live Streams</h1>
+      <p>Monitor active stream connections and platform delivery status</p>
+    </div>
+    <div class="cards-row">
+      <div class="stream-platform-card" id="ytCard">
+        <div class="platform-header yt">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.95C18.88 4 12 4 12 4s-6.88 0-8.59.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.95C5.12 20 12 20 12 20s6.88 0 8.59-.47a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+          <span>YouTube Live</span>
+          <div class="platform-status-dot" id="ytDot"></div>
+        </div>
+        <div class="platform-details">
+          <div class="platform-detail-row"><span>Protocol</span><code>RTMP</code></div>
+          <div class="platform-detail-row"><span>Endpoint</span><code>a.rtmp.youtube.com/live2</code></div>
+          <div class="platform-detail-row"><span>Port</span><code>1935</code></div>
+          <div class="platform-detail-row"><span>Status</span><span id="ytDetailStatus" class="status-text">—</span></div>
+          <div class="platform-detail-row"><span>Bitrate</span><span id="ytBitrate">—</span></div>
+        </div>
+        <div class="platform-actions">
+          <a href="https://studio.youtube.com" target="_blank" class="btn-sm btn-outline">Open Studio ↗</a>
+        </div>
+      </div>
+
+      <div class="stream-platform-card" id="fbCard">
+        <div class="platform-header fb">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+          <span>Facebook Live</span>
+          <div class="platform-status-dot" id="fbDot"></div>
+        </div>
+        <div class="platform-details">
+          <div class="platform-detail-row"><span>Protocol</span><code>RTMPS (TLS)</code></div>
+          <div class="platform-detail-row"><span>Endpoint</span><code>live-api-s.facebook.com</code></div>
+          <div class="platform-detail-row"><span>Port</span><code>443</code></div>
+          <div class="platform-detail-row"><span>Relay</span><code>FFmpeg (stream copy)</code></div>
+          <div class="platform-detail-row"><span>Status</span><span id="fbDetailStatus" class="status-text">—</span></div>
+        </div>
+        <div class="platform-actions">
+          <a href="https://www.facebook.com/live/producer" target="_blank" class="btn-sm btn-outline">Open Producer ↗</a>
+          <button class="btn-sm btn-warning" onclick="restartFBRelay()">Restart Relay</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem">
+      <div class="card-header"><h2>Port Status</h2></div>
+      <table class="data-table">
+        <thead><tr><th>Port</th><th>Protocol</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="portTableBody">
+          <tr><td>1935</td><td>TCP</td><td>RTMP Ingress from OBS</td><td><span class="badge" id="port1935Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(1935)">Test</button></td></tr>
+          <tr><td>8080</td><td>TCP</td><td>Nginx Stat/Health Page</td><td><span class="badge" id="port8080Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(8080)">Test</button></td></tr>
+          <tr><td>22</td><td>TCP</td><td>SSH Management</td><td><span class="badge success">Secure</span></td><td>—</td></tr>
+          <tr><td>1936</td><td>TCP</td><td>Local FFmpeg fbsink</td><td><span class="badge" id="port1936Badge">Internal</span></td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: HEALTH MONITOR ══════════ -->
+  <div class="tab-content" id="tab-health">
+    <div class="page-header">
+      <h1>Health Monitor</h1>
+      <p>Real-time system and stream health checks</p>
+    </div>
+
+    <div class="health-controls">
+      <button class="btn btn-primary" onclick="runHealthCheck()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.48"/></svg>
+        Run Full Health Check
+      </button>
+      <label class="toggle-label">
+        <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()" checked />
+        Auto-refresh every 30s
+      </label>
+    </div>
+
+    <div class="health-results" id="healthResults">
+      <div class="health-group">
+        <div class="health-group-title">Process Status</div>
+        <div class="health-row" id="hr-nginx"><span class="health-icon">⏳</span><span>Nginx RTMP</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-ffmpeg"><span class="health-icon">⏳</span><span>FFmpeg Facebook Relay</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-watchdog"><span class="health-icon">⏳</span><span>Watchdog</span><span class="health-detail">checking...</span></div>
+      </div>
+      <div class="health-group">
+        <div class="health-group-title">Network & Ports</div>
+        <div class="health-row" id="hr-port1935"><span class="health-icon">⏳</span><span>Port 1935 (RTMP)</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-port8080"><span class="health-icon">⏳</span><span>Port 8080 (Stat)</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-yt-reach"><span class="health-icon">⏳</span><span>YouTube Ingest Reachable</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-fb-reach"><span class="health-icon">⏳</span><span>Facebook RTMPS Reachable</span><span class="health-detail">checking...</span></div>
+      </div>
+      <div class="health-group">
+        <div class="health-group-title">Configuration</div>
+        <div class="health-row" id="hr-yt-key"><span class="health-icon">⏳</span><span>YouTube Stream Key</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-fb-key"><span class="health-icon">⏳</span><span>Facebook Stream Key</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-nginx-conf"><span class="health-icon">⏳</span><span>Nginx Config Valid</span><span class="health-detail">checking...</span></div>
+      </div>
+      <div class="health-group">
+        <div class="health-group-title">Active Stream</div>
+        <div class="health-row" id="hr-stream-active"><span class="health-icon">⏳</span><span>OBS Stream Active</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-bitrate"><span class="health-icon">⏳</span><span>Stream Bitrate</span><span class="health-detail">checking...</span></div>
+        <div class="health-row" id="hr-clients"><span class="health-icon">⏳</span><span>Connected Clients</span><span class="health-detail">checking...</span></div>
+      </div>
+    </div>
+
+    <div class="health-summary" id="healthSummary">
+      <div class="summary-item"><span class="badge success" id="passCount">PASS: 0</span></div>
+      <div class="summary-item"><span class="badge warning" id="warnCount">WARN: 0</span></div>
+      <div class="summary-item"><span class="badge danger" id="failCount">FAIL: 0</span></div>
+      <div class="summary-verdict" id="summaryVerdict">Run health check to see results</div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: STREAM KEYS ══════════ -->
+  <div class="tab-content" id="tab-keys">
+    <div class="page-header">
+      <h1>Stream Keys</h1>
+      <p>Securely manage your YouTube and Facebook stream keys</p>
+    </div>
+
+    <div class="security-warning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <div>
+        <strong>Security Notice</strong> — Stream keys are stored in <code>/opt/streaming-backend/keys/stream_keys.env</code> with chmod 600. Never commit this file to git or share it. Rotate keys after every event.
+      </div>
+    </div>
+
+    <div class="keys-grid">
+      <div class="key-card">
+        <div class="key-card-header yt-header">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.95C18.88 4 12 4 12 4s-6.88 0-8.59.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.95C5.12 20 12 20 12 20s6.88 0 8.59-.47a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+          YouTube Stream Key
+        </div>
+        <div class="key-input-group">
+          <input type="password" id="ytKeyInput" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" class="key-input" />
+          <button class="btn-toggle-vis" onclick="toggleVis('ytKeyInput')">👁</button>
+        </div>
+        <div class="key-instructions">
+          <strong>How to get:</strong> YouTube Studio → Go Live → Stream → Copy Stream Key
+        </div>
+        <div class="key-commands">
+          <div class="cmd-group">
+            <div class="cmd-label">Update in rtmp.conf:</div>
+            <code class="cmd-block">sudo nano /etc/nginx/rtmp.conf<br>sudo nginx -s reload</code>
+          </div>
+        </div>
+        <a href="https://studio.youtube.com" target="_blank" class="btn-sm btn-outline" style="margin-top:1rem;display:inline-block">Get Key from YouTube Studio ↗</a>
+      </div>
+
+      <div class="key-card">
+        <div class="key-card-header fb-header">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+          Facebook Stream Key
+        </div>
+        <div class="key-input-group">
+          <input type="password" id="fbKeyInput" placeholder="FB-XXXXXXXXX-0-xxxxxxxxxx" class="key-input" />
+          <button class="btn-toggle-vis" onclick="toggleVis('fbKeyInput')">👁</button>
+        </div>
+        <div class="key-instructions">
+          <strong>How to get:</strong> Facebook → Professional Dashboard → Live Video → Use Stream Key
+        </div>
+        <div class="key-commands">
+          <div class="cmd-group">
+            <div class="cmd-label">Update in stream_keys.env:</div>
+            <code class="cmd-block">sudo nano /opt/streaming-backend/keys/stream_keys.env<br>sudo systemctl restart fb-relay</code>
+          </div>
+        </div>
+        <a href="https://www.facebook.com/live/producer" target="_blank" class="btn-sm btn-outline" style="margin-top:1rem;display:inline-block">Get Key from Facebook Producer ↗</a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem">
+      <div class="card-header"><h2>Key Rotation — Post Event</h2></div>
+      <div class="rotation-steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">End YouTube Live event in YouTube Studio</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Reset YouTube stream key in YouTube Studio → Settings → Channel → Reset</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">End Facebook Live broadcast in Facebook</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Get new Facebook stream key from Live Producer</div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Update <code>stream_keys.env</code> and <code>rtmp.conf</code> with placeholder values</div></div>
+        <div class="step"><div class="step-num">6</div><div class="step-text">Run: <code>sudo systemctl restart fb-relay && sudo nginx -s reload</code></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: LOGS ══════════ -->
+  <div class="tab-content" id="tab-logs">
+    <div class="page-header">
+      <h1>Live Logs</h1>
+      <p>Real-time log monitoring for all relay components</p>
+    </div>
+
+    <div class="log-tabs">
+      <button class="log-tab-btn active" onclick="switchLog('nginx')" id="lbNginx">Nginx Error Log</button>
+      <button class="log-tab-btn" onclick="switchLog('ffmpeg')" id="lbFFmpeg">FFmpeg FB Relay</button>
+      <button class="log-tab-btn" onclick="switchLog('watchdog')" id="lbWatchdog">Watchdog</button>
+      <div class="log-controls">
+        <button class="btn-sm" onclick="clearLog()">Clear</button>
+        <label class="toggle-label small"><input type="checkbox" id="autoScrollToggle" checked /> Auto-scroll</label>
+      </div>
+    </div>
+
+    <div class="log-viewer" id="logViewer">
+      <div class="log-placeholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="48" height="48"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p>Logs will appear here when the relay is running.</p>
+        <p style="font-size:0.8rem;opacity:0.5">In production, this connects to the Nginx stat API and displays simulated log data.</p>
+      </div>
+    </div>
+
+    <div class="log-commands-ref">
+      <strong>Shell commands to follow logs in terminal:</strong>
+      <div class="cmd-ref-grid">
+        <code>sudo tail -f /var/log/nginx/error.log</code>
+        <code>tail -f /opt/streaming-backend/logs/ffmpeg/fb_relay.log</code>
+        <code>tail -f /opt/streaming-backend/logs/watchdog.log</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: CHECKLIST ══════════ -->
+  <div class="tab-content" id="tab-checklist">
+    <div class="page-header">
+      <h1>Event Checklist</h1>
+      <p>Complete before every live broadcast — police parades, public ceremonies, formal events</p>
+    </div>
+
+    <div class="checklist-progress">
+      <div class="progress-bar-outer"><div class="progress-bar-inner" id="checklistProgress" style="width:0%"></div></div>
+      <span id="checklistProgressText">0 / 0 completed</span>
+      <button class="btn-sm btn-outline" onclick="resetChecklist()">Reset</button>
+    </div>
+
+    <div class="checklist-sections" id="checklistSections"></div>
+  </div>
+
+  <!-- ══════════ TAB: EMERGENCY ══════════ -->
+  <div class="tab-content" id="tab-emergency">
+    <div class="page-header emergency-header">
+      <div class="emergency-icon-large">🚨</div>
+      <h1>Emergency Recovery</h1>
+      <p>Step-by-step recovery procedures for every live event failure scenario</p>
+    </div>
+
+    <div class="emergency-scenarios" id="emergencyScenarios"></div>
+
+    <div class="card emergency-ref-card">
+      <div class="card-header"><h2>📋 Quick Reference (Print & Keep On-Site)</h2></div>
+      <div class="quick-ref-grid">
+        <div class="qr-item">
+          <div class="qr-label">OBS URL</div>
+          <code>rtmp://[SERVER_IP]:1935/live</code>
+        </div>
+        <div class="qr-item">
+          <div class="qr-label">OBS Stream Key</div>
+          <code>stream</code>
+        </div>
+        <div class="qr-item">
+          <div class="qr-label">Restart Nginx</div>
+          <code>sudo systemctl restart nginx-rtmp</code>
+        </div>
+        <div class="qr-item">
+          <div class="qr-label">Restart FB Relay</div>
+          <code>sudo systemctl restart fb-relay</code>
+        </div>
+        <div class="qr-item">
+          <div class="qr-label">Health Check</div>
+          <code>bash /opt/streaming-backend/scripts/health_check.sh</code>
+        </div>
+        <div class="qr-item">
+          <div class="qr-label">Watch All Logs</div>
+          <code>sudo tail -f /var/log/nginx/error.log</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: DOCS ══════════ -->
+  <div class="tab-content" id="tab-docs">
+    <div class="page-header">
+      <h1>Documentation</h1>
+      <p>Complete reference for setup, configuration, and operations</p>
+    </div>
+
+    <div class="docs-grid" id="docsGrid"></div>
+  </div>
+
+</main>
+
+<!-- Modal for confirmations -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modalTitle">Confirm Action</h3>
+      <button onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="modalConfirmBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
