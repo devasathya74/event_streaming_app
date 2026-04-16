@@ -497,7 +497,7 @@ body::before {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
-.metric-item {}
+.metric-item { display: flex; flex-direction: column; }
 .metric-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
 .metric-value { font-size: 1rem; font-weight: 700; color: var(--text-primary); font-family: var(--mono); margin-bottom: 6px; }
 .metric-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
@@ -767,7 +767,7 @@ body::before {
 .key-instructions strong { color: var(--text-primary); }
 
 .key-commands { padding: 14px 20px; }
-.cmd-group {}
+.cmd-group { display: flex; flex-direction: column; gap: 4px; }
 .cmd-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
 .cmd-block {
   display: block;

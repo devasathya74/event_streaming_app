@@ -85,7 +85,9 @@ html, body {
   font-size: 1.8rem; font-weight: 800;
   margin-bottom: 12px;
   background: linear-gradient(135deg, #f1f5f9, #94a3b8);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .offline-content p {
   font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; margin-bottom: 28px;
@@ -173,7 +175,7 @@ html, body {
 @keyframes livePulse { 0%,100%{box-shadow:0 0 15px rgba(239,68,68,0.5)} 50%{box-shadow:0 0 25px rgba(239,68,68,0.7)} }
 @keyframes dotPulse  { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-.event-info {}
+.event-info { display: flex; flex-direction: column; gap: 2px; }
 .event-name { font-size: 0.95rem; font-weight: 700; line-height: 1.2; }
 .event-sub  { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
 
@@ -290,6 +292,7 @@ html, body {
 
 .volume-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 80px; height: 4px;
   background: rgba(255,255,255,0.3);
   border-radius: 2px; outline: none; cursor: pointer;
