@@ -1,0 +1,55 @@
+# =============================================================================
+# fb-relay.service — systemd Service for FFmpeg Facebook RTMPS Relay
+# =============================================================================
+# Deploy to: /etc/systemd/system/fb-relay.service
+#
+# This service starts the FFmpeg process that pulls the stream from the local
+# Nginx fbsink application and pushes it to Facebook over RTMPS.
+# It depends on nginx-rtmp.service being up first.
+#
+# Commands after deploying:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable fb-relay
+#   sudo systemctl start fb-relay
+#   sudo systemctl status fb-relay
+#   sudo journalctl -u fb-relay -f     # Follow logs
+# =============================================================================
+
+[Unit]
+Description=FFmpeg Facebook Live RTMPS Relay
+After=network-online.target nginx-rtmp.service
+Wants=network-online.target
+Requires=nginx-rtmp.service
+
+[Service]
+Type=simple
+# ⚠ IMPORTANT: Update this path to match your actual deployment directory
+ExecStart=/opt/streaming-backend/scripts/fb_relay.sh
+
+# Restart behavior
+# FFmpeg exits if the connection to Facebook drops. We want it to restart.
+Restart=always
+RestartSec=10s
+StartLimitIntervalSec=120s
+StartLimitBurst=6
+
+# Wait for Nginx to be ready before FFmpeg tries to connect to fbsink
+ExecStartPre=/bin/sleep 3
+
+# Give FFmpeg time to clean up on stop
+TimeoutStopSec=30s
+
+# Logging
+StandardOutput=append:/opt/streaming-backend/logs/ffmpeg/fb_relay.log
+StandardError=append:/opt/streaming-backend/logs/ffmpeg/fb_relay.log
+SyslogIdentifier=fb-relay
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+# Run as streaming user (create with: useradd -r -s /sbin/nologin streaming)
+# User=streaming
+# Group=streaming
+
+[Install]
+WantedBy=multi-user.target

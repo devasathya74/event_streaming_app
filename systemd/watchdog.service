@@ -1,0 +1,41 @@
+# =============================================================================
+# watchdog.service — systemd Service for the Watchdog Script
+# =============================================================================
+# Deploy to: /etc/systemd/system/watchdog.service
+#
+# The watchdog monitors nginx-rtmp and fb-relay, restarting them if they die.
+# It adds a second layer of resilience on top of systemd's own Restart= logic.
+#
+# Note: If you rely on systemd's Restart=always for both services, the watchdog
+# is optional but adds smarter backoff and structured logging.
+#
+# Commands after deploying:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable watchdog
+#   sudo systemctl start watchdog
+#   sudo journalctl -u watchdog -f
+# =============================================================================
+
+[Unit]
+Description=Streaming Relay Watchdog (monitors nginx-rtmp + fb-relay)
+After=nginx-rtmp.service fb-relay.service
+Wants=nginx-rtmp.service fb-relay.service
+
+[Service]
+Type=simple
+# ⚠ Update path to match your deployment
+ExecStart=/opt/streaming-backend/scripts/watchdog.sh
+
+Restart=always
+RestartSec=15s
+
+# Allow the script to run indefinitely
+TimeoutStartSec=0
+TimeoutStopSec=30s
+
+StandardOutput=append:/opt/streaming-backend/logs/watchdog.log
+StandardError=append:/opt/streaming-backend/logs/watchdog.log
+SyslogIdentifier=stream-watchdog
+
+[Install]
+WantedBy=multi-user.target

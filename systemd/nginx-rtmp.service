@@ -1,0 +1,48 @@
+# =============================================================================
+# nginx-rtmp.service — systemd Service for Nginx RTMP Relay
+# =============================================================================
+# Deploy to: /etc/systemd/system/nginx-rtmp.service
+#
+# Commands after deploying:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable nginx-rtmp
+#   sudo systemctl start nginx-rtmp
+#   sudo systemctl status nginx-rtmp
+# =============================================================================
+
+[Unit]
+Description=Nginx RTMP Live Stream Relay Server
+Documentation=https://github.com/arut/nginx-rtmp-module
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/nginx.pid
+
+# Configuration validation before start
+ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+
+# Restart behavior
+# on-failure: restart if nginx exits with non-zero code
+# on-abnormal: also restart on signal termination
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+# Logging — forward to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nginx-rtmp
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=false    # false because nginx needs to bind port 1935 as root then drops privs
+LimitNOFILE=65536        # High file descriptor limit for connections
+
+[Install]
+WantedBy=multi-user.target

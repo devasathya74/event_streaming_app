@@ -1,0 +1,25 @@
+# Force LF line endings for all shell scripts and config files
+# when checked out on any OS. This ensures they run correctly on Linux.
+
+# Shell scripts — must be LF on Linux
+*.sh        text eol=lf
+
+# Nginx configs
+*.conf      text eol=lf
+
+# systemd unit files
+*.service   text eol=lf
+
+# Environment / key files
+*.env       text eol=lf
+
+# Documentation — allow native line endings
+*.md        text
+*.txt       text
+
+# Git placeholder files
+.gitkeep    text eol=lf
+
+# Windows — preserve CRLF if needed
+*.bat       text eol=crlf
+*.ps1       text eol=crlf

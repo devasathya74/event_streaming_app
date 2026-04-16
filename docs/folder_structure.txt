@@ -1,0 +1,32 @@
+streaming-backend/
+├── nginx/
+│   ├── nginx.conf                  # Main nginx config (includes rtmp block)
+│   └── rtmp.conf                   # RTMP application config (included by nginx.conf)
+├── scripts/
+│   ├── start_relay.sh              # Start Nginx relay server
+│   ├── stop_relay.sh               # Gracefully stop all relay processes
+│   ├── health_check.sh             # Verify ports, stream health, process state
+│   ├── watchdog.sh                 # Auto-restart Nginx and FFmpeg on failure
+│   ├── fb_relay.sh                 # FFmpeg relay: local RTMP → Facebook RTMPS
+│   ├── check_ports.sh              # Verify required ports are open/listening
+│   └── pre_event_test.sh           # Full test run before going live
+├── systemd/
+│   ├── nginx-rtmp.service          # systemd unit for Nginx relay
+│   ├── fb-relay.service            # systemd unit for FFmpeg Facebook relay
+│   └── watchdog.service            # systemd unit for the watchdog timer
+├── logs/
+│   ├── nginx/                      # Nginx access and error logs
+│   │   ├── access.log
+│   │   └── error.log
+│   ├── rtmp/                       # RTMP-specific stream event logs
+│   │   └── rtmp.log
+│   └── ffmpeg/                     # FFmpeg relay logs
+│       └── fb_relay.log
+├── keys/
+│   └── stream_keys.env             # Stream keys (chmod 600, never commit to git)
+└── docs/
+    ├── architecture_overview.md    # This architecture document
+    ├── setup_guide.md              # Step-by-step installation guide
+    ├── obs_setup.md                # OBS configuration instructions
+    ├── security_guide.md           # Hardening and access control
+    └── event_checklist.md          # Pre-event readiness checklist
