@@ -43,9 +43,87 @@ VIEWER_DIR      = BASE_DIR / "viewer"
 LOG_DIR         = BASE_DIR / "logs"
 MEDIAMTX_API    = "http://127.0.0.1:9997"
 PORT            = 3000
-FFMPEG_BIN      = BASE_DIR / "bin" / "ffmpeg.exe"   # falls back to PATH if missing
+FFMPEG_BIN      = BASE_DIR / "bin" / "ffmpeg-ssl.exe"
 if not FFMPEG_BIN.exists():
-    FFMPEG_BIN  = Path("ffmpeg")                    # use system ffmpeg
+    FFMPEG_BIN = BASE_DIR / "bin" / "ffmpeg.exe"
+if not FFMPEG_BIN.exists():
+    FFMPEG_BIN = Path("ffmpeg")
+RTMP_INPUT      = "rtmp://127.0.0.1:1985/live/mystream"
+
+# ── Relay Process State (in-process, no WinSW) ────────────────────────────────
+_relay_lock  = threading.Lock()
+_relay_procs = {"yt": None, "fb": None}   # platform → subprocess.Popen | None
+
+def _relay_alive(platform: str) -> bool:
+    p = _relay_procs.get(platform)
+    return p is not None and p.poll() is None
+
+def _build_ffmpeg_args(platform: str, keys: dict) -> list | None:
+    """Build ffmpeg-ssl argument list for the given platform."""
+    if platform == "yt":
+        key = keys.get("yt", "")
+        if not key:
+            return None
+        dest = f"rtmp://a.rtmp.youtube.com/live2/{key}"
+    elif platform == "fb":
+        key = keys.get("fb", "")
+        if not key:
+            return None
+        dest = f"rtmps://live-api-s.facebook.com:443/rtmp/{key}"
+    else:
+        return None
+    return [
+        str(FFMPEG_BIN),
+        "-loglevel", "warning",
+        "-i", RTMP_INPUT,
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+        "-f", "flv", dest
+    ]
+
+def _start_relay_proc(platform: str) -> dict:
+    """Start relay for one platform; returns result dict."""
+    with _relay_lock:
+        if _relay_alive(platform):
+            return {"ok": False, "msg": f"{platform} relay already running"}
+        keys = _load_keys()
+        args = _build_ffmpeg_args(platform, keys)
+        if args is None:
+            return {"ok": False, "msg": f"No stream key set for {platform}"}
+        log_path = LOG_DIR / f"relay_{platform}.log"
+        try:
+            fh = open(str(log_path), "a", encoding="utf-8")
+            p = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=fh,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            )
+            _relay_procs[platform] = p
+            log.info(f"Relay [{platform}] started PID={p.pid} → {args[-1]}")
+            return {"ok": True, "pid": p.pid, "msg": f"{platform} relay started"}
+        except Exception as e:
+            log.error(f"Relay [{platform}] start failed: {e}")
+            return {"ok": False, "msg": str(e)}
+
+def _stop_relay_proc(platform: str) -> dict:
+    """Stop relay for one platform."""
+    with _relay_lock:
+        p = _relay_procs.get(platform)
+        if p is None or p.poll() is not None:
+            _relay_procs[platform] = None
+            return {"ok": True, "msg": f"{platform} relay not running"}
+        try:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+            _relay_procs[platform] = None
+            log.info(f"Relay [{platform}] stopped")
+            return {"ok": True, "msg": f"{platform} relay stopped"}
+        except Exception as e:
+            return {"ok": False, "msg": str(e)}
 
 LOG_MAP = {
     "mediamtx": BASE_DIR / "logs" / "mediamtx.log",
@@ -164,9 +242,10 @@ def _load_keys() -> dict:
             continue
         k, _, v = line.partition("=")
         v = v.strip().strip('"')
-        if k == "YT_STREAM_KEY":
+        # Support both legacy names and standardized names during load
+        if k in ("YT_STREAM_KEY", "YOUTUBE_KEY"):
             keys["yt"] = v if not v.startswith("YOUR_") else ""
-        elif k == "FB_STREAM_KEY":
+        elif k in ("FB_STREAM_KEY", "FACEBOOK_KEY"):
             keys["fb"] = v if not v.startswith("YOUR_") else ""
         elif k == "FB_RTMPS_URL":
             keys["fb_rtmps_url"] = v
@@ -362,6 +441,7 @@ class APIHandler(BaseHTTPRequestHandler):
         if path == "/api/logs":              return self._handle_logs(qs)
         if path == "/api/health":            return self._ok({"status": "ok", "uptime": int(time.time() - _START)})
         if path == "/api/streams":           return self._handle_get_streams()
+        if path == "/api/relay/status":      return self._handle_relay_status()
 
         return self._err(404, f"Not found: {path}")
 
@@ -374,12 +454,20 @@ class APIHandler(BaseHTTPRequestHandler):
         if data is None:
             return self._err(400, "Invalid JSON body")
 
-        if path == "/api/keys":           return self._handle_update_keys(data)
-        if path == "/api/control":        return self._handle_control(data)
-        if path == "/api/clips/trigger":  return self._handle_clip_trigger(data)
-        if path == "/api/clips/delete":   return self._handle_clip_delete(data)
-        if path == "/api/stream/start":   return self._handle_stream_event("start")
-        if path == "/api/stream/stop":    return self._handle_stream_event("stop")
+        if path == "/api/keys":             return self._handle_update_keys(data)
+        if path == "/api/control":          return self._handle_control(data)
+        if path == "/api/clips/trigger":    return self._handle_clip_trigger(data)
+        if path == "/api/clips/delete":     return self._handle_clip_delete(data)
+        if path == "/api/stream/start":     return self._handle_stream_event("start")
+        if path == "/api/stream/stop":      return self._handle_stream_event("stop")
+        # ── Relay manual control ──────────────────────────────────────────────
+        if path == "/api/relay/start/yt":   return self._relay_action("start", "yt")
+        if path == "/api/relay/start/fb":   return self._relay_action("start", "fb")
+        if path == "/api/relay/start/both": return self._relay_action("start", "both")
+        if path == "/api/relay/stop/yt":    return self._relay_action("stop",  "yt")
+        if path == "/api/relay/stop/fb":    return self._relay_action("stop",  "fb")
+        if path == "/api/relay/stop/both":  return self._relay_action("stop",  "both")
+        if path == "/api/relay/kill":       return self._relay_kill_all()
 
         return self._err(404, f"Not found: {path}")
 
@@ -432,32 +520,26 @@ class APIHandler(BaseHTTPRequestHandler):
                     'YT_STREAM_KEY=""\nFB_STREAM_KEY=""\nFB_RTMPS_URL="rtmps://live-api-s.facebook.com:443/rtmp/"\n',
                     encoding="utf-8"
                 )
-            lines = KEYS_FILE.read_text(encoding="utf-8").splitlines(keepends=True)
-            new_lines = []
-            for line in lines:
-                s = line.strip()
-                if yt_key and s.startswith("YT_STREAM_KEY="):
-                    new_lines.append(f'YT_STREAM_KEY="{yt_key}"\n')
-                elif fb_key and s.startswith("FB_STREAM_KEY="):
-                    new_lines.append(f'FB_STREAM_KEY="{fb_key}"\n')
-                else:
-                    new_lines.append(line)
-            KEYS_FILE.write_text("".join(new_lines), encoding="utf-8")
+            
+            # Load existing keys to merge
+            current = _load_keys()
+            final_yt = yt_key if yt_key else current.get("yt", "")
+            final_fb = fb_key if fb_key else current.get("fb", "")
+
+            # Re-write the entire file with standardized keys
+            content = [
+                f'YT_STREAM_KEY="{final_yt}"',
+                f'FB_STREAM_KEY="{final_fb}"',
+                f'FB_RTMPS_URL="{current.get("fb_rtmps_url", "rtmps://live-api-s.facebook.com:443/rtmp/")}"'
+            ]
+            KEYS_FILE.write_text("\n".join(content) + "\n", encoding="utf-8")
 
             # Update mediamtx.yml push destinations whenever either key changes.
             # _update_mediamtx_yt_push reads the current FB key from the file it
             # just wrote, so load the fresh keys after writing.
-            errors = []
-            fresh_keys = _load_keys()
-            if yt_key or (fb_key and fresh_keys.get("yt")):
-                # Rebuild the runOnReady line with the current YT+FB keys.
-                _update_mediamtx_yt_push(fresh_keys["yt"])
-            if fb_key:
-                # Also restart fb-relay (PowerShell relay reads from key file)
-                _win_service_control("restart", "fb-relay")
-
             log.info(f"Keys updated: YT={'set' if yt_key else 'unchanged'} FB={'set' if fb_key else 'unchanged'}")
-            self._ok({"success": True, "errors": errors})
+            # NOTE: keys saved — relay does NOT auto-start. User clicks Start button.
+            self._ok({"success": True})
         except PermissionError:
             self._err(500, f"Permission denied writing {KEYS_FILE}")
         except Exception as e:
@@ -502,6 +584,47 @@ class APIHandler(BaseHTTPRequestHandler):
         all_ok = len(failures) == 0
         self._ok({"success": all_ok, "results": results,
                   "failures": failures})
+
+    # ── GET /api/relay/status ─────────────────────────────────────────────────
+    def _handle_relay_status(self):
+        self._ok({
+            "yt": {"running": _relay_alive("yt"),
+                   "pid":     _relay_procs["yt"].pid if _relay_alive("yt") else None},
+            "fb": {"running": _relay_alive("fb"),
+                   "pid":     _relay_procs["fb"].pid if _relay_alive("fb") else None},
+        })
+
+    # ── POST /api/relay/start|stop/yt|fb|both ────────────────────────────────
+    def _relay_action(self, action: str, platform: str):
+        platforms = ["yt", "fb"] if platform == "both" else [platform]
+        results = {}
+        for p in platforms:
+            if action == "start":
+                results[p] = _start_relay_proc(p)
+            else:
+                results[p] = _stop_relay_proc(p)
+        all_ok = all(r.get("ok") for r in results.values())
+        self._ok({"success": all_ok, "results": results,
+                  "relay": {p: {"running": _relay_alive(p)} for p in ["yt", "fb"]}})
+
+    # ── POST /api/relay/kill ──────────────────────────────────────────────────
+    def _relay_kill_all(self):
+        import signal
+        killed = []
+        # Kill in-process managed relays
+        for platform in ["yt", "fb"]:
+            r = _stop_relay_proc(platform)
+            if r.get("ok"):
+                killed.append(platform)
+        # Also nuke any leftover ffmpeg-ssl.exe processes system-wide
+        rc, out, _ = _run(_POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+                          "Stop-Process -Name 'ffmpeg-ssl','ffmpeg' -Force -EA SilentlyContinue; "
+                          "Stop-Service stream-relay -Force -EA SilentlyContinue; "
+                          "Write-Host 'done'")
+        log.info(f"Relay kill-all: in-process={killed} svc_rc={rc}")
+        self._ok({"success": True, "killed_platforms": killed,
+                  "svc_stop": rc == 0,
+                  "relay": {"yt": {"running": False}, "fb": {"running": False}}})
 
     # ── GET /api/streams ──────────────────────────────────────────────────────
     def _handle_get_streams(self):
@@ -710,70 +833,12 @@ class APIHandler(BaseHTTPRequestHandler):
 
 # ── Update MediaMTX YT push ───────────────────────────────────────────────────
 def _update_mediamtx_yt_push(yt_key: str):
-    """Write the YouTube push and Facebook RTMPS push into mediamtx.yml paths.live
-    section, then restart mediamtx so the new keys take effect immediately.
-
-    MediaMTX runOnReady must be a single-line shell command.  Multi-line YAML
-    folded blocks ('>') are NOT supported as shell strings by MediaMTX — the
-    newlines become spaces and break argument parsing.  We therefore write one
-    compact ffmpeg invocation per destination.
     """
-    yml_path = BASE_DIR / "mediamtx" / "mediamtx.yml"
-    if not yml_path.exists():
-        log.warning("mediamtx.yml not found — cannot inject stream keys")
-        return
-
-    import re
-
-    content = yml_path.read_text(encoding="utf-8")
-    keys    = _load_keys()
-    fb_key  = keys.get("fb", "")
-
-    # ── Build runOnReady command ──────────────────────────────────────────────
-    # MediaMTX exposes the path name as $MTX_PATH.
-    # Source port must match rtmpAddress in mediamtx.yml (1985).
-    yt_dest  = f"rtmp://a.rtmp.youtube.com/live2/{yt_key}"
-
-    if fb_key:
-        # Push to BOTH YouTube (RTMP) and Facebook (RTMPS) in one ffmpeg call
-        # using the tee muxer — single decode, two outputs, zero extra CPU.
-        fb_dest  = f"rtmps://live-api-s.facebook.com:443/rtmp/{fb_key}"
-        ffmpeg_cmd = (
-            f"ffmpeg -re -i rtmp://127.0.0.1:1985/$MTX_PATH "
-            f"-c copy -f flv {yt_dest} "
-            f"-c copy -f flv {fb_dest}"
-        )
-    else:
-        # YouTube only
-        ffmpeg_cmd = (
-            f"ffmpeg -re -i rtmp://127.0.0.1:1985/$MTX_PATH "
-            f"-c copy -f flv {yt_dest}"
-        )
-
-    # ── Inject into the 'live:' path block ───────────────────────────────────
-    # Pattern matches any existing runOnReady / runOnReadyRestart pair (commented or not).
-    new_block = (
-        f"    runOnReady: {ffmpeg_cmd}\n"
-        f"    runOnReadyRestart: yes\n"
-    )
-
-    if re.search(r"    #?runOnReady:", content):
-        # Replace existing block
-        content = re.sub(
-            r"    #?runOnReady:.*\n(?:    #?runOnReadyRestart:.*\n)?",
-            new_block,
-            content,
-        )
-    else:
-        # Append before the all_others block (or at the end of the live: block)
-        content = re.sub(
-            r"(  live:\n(?:    .*\n)*?)(  all_others:|\Z)",
-            lambda m: m.group(1) + new_block + m.group(2),
-            content,
-        )
-
-    yml_path.write_text(content, encoding="utf-8")
-    log.info(f"mediamtx.yml updated — YT key set, FB={'set' if fb_key else 'not set'}")
+    Restart mediamtx so the new keys take effect immediately.
+    We no longer modify mediamtx.yml here because it is configured to run
+    relay.ps1, which dynamically reads the keys from stream_keys.env upon launch.
+    """
+    log.info(f"mediamtx.yml uses relay.ps1. Restarting mediamtx to apply new keys.")
     _win_service_control("restart", "mediamtx")
 
 

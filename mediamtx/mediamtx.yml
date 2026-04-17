@@ -1,42 +1,27 @@
-# mediamtx.yml -- StreamOps Production (MediaMTX v1.9.3)
-# OBS Server  : rtmp://[IP]:1985/live
-# OBS Key     : stream
-
 logLevel: info
 logDestinations: [stdout, file]
-logFile: C:\streaming-backend\logs\mediamtx.log
+logFile: C:/streaming-backend/logs/mediamtx.log
 
-# REST API (used by server.py dashboard)
 api: true
 apiAddress: 127.0.0.1:9997
 
-# RTMP ingress -- OBS connects here on port 1985
 rtmp: true
 rtmpAddress: :1985
 
-# HLS output -- browsers watch here
+rtsp: true
+rtspAddress: :8554
+
 hls: true
 hlsAddress: :8888
-hlsVariant: lowLatency
-hlsSegmentCount: 7
-hlsSegmentDuration: 2s
 hlsAllowOrigin: '*'
-hlsDirectory: C:\streaming-backend\www\hls
+hlsDirectory: C:/streaming-backend/www/hls
 
-# WebRTC (low latency)
 webrtc: true
 webrtcAddress: :8889
 
-paths:
-  live:
-    source: publisher
-    record: true
-    recordPath: C:\streaming-backend\recordings\%path\%Y-%m-%d_%H-%M-%S-%f
-    recordFormat: fmp4
-    # runOnReady and runOnReadyRestart are injected by server.py _update_mediamtx_yt_push()
-    # when stream keys are saved via the dashboard. Do not edit manually.
-    #runOnReady: ffmpeg -re -i rtmp://127.0.0.1:1985/$MTX_PATH -c copy -f flv rtmp://a.rtmp.youtube.com/live2/YOUR_KEY
-    #runOnReadyRestart: yes
+srt: true
+srtAddress: :8890
 
+paths:
   all_others:
     source: publisher

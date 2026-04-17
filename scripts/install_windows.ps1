@@ -243,7 +243,7 @@ Write-OK "WinSW: $winswDest"
 # ==========================================================================
 Write-Step "6/9" "Deploying project files"
 
-$scriptFiles = @("server.py", "ai_clipper.py", "fb_relay.ps1", "watchdog.ps1")
+$scriptFiles = @("server.py", "ai_clipper.py", "relay.ps1", "watchdog.ps1")
 foreach ($f in $scriptFiles) {
     $src = Join-Path $ScriptSrc $f
     if (Test-Path $src) {
@@ -305,7 +305,6 @@ foreach ($s in $svcNames) {
     Stop-Service $s -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 300
 }
-# Kill any lingering WinSW wrapper processes by name (svc_xxx or service name)
 $svcExes = @("mediamtx", "stream-api", "stream-clipper", "fb-relay")
 foreach ($s in $svcExes) {
     Get-Process -Name $s -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -343,16 +342,9 @@ Install-WinSWService `
     -DisplayName "StreamOps AI Highlight Clipper" `
     -EnvExtra    "STREAMING_BASE=$BaseDir"
 
-# Service 4: Facebook RTMPS Relay (PowerShell)
-$fbArgs = "-ExecutionPolicy Bypass -NonInteractive -File $BaseDir\scripts\fb_relay.ps1"
-Install-WinSWService `
-    -SvcName     "fb-relay" `
-    -Executable  "powershell.exe" `
-    -Arguments   $fbArgs `
-    -DisplayName "StreamOps Facebook RTMPS Relay" `
-    -EnvExtra    "STREAMING_BASE=$BaseDir"
+# Service 4: Obsolete fb-relay removed (handled by relay.ps1 per-stream)
 
-Write-OK "All 4 Windows services installed"
+Write-OK "All 3 Windows services installed"
 
 # ==========================================================================
 # STEP 8: Windows Firewall
@@ -378,7 +370,7 @@ foreach ($r in $fwRules) {
 # ==========================================================================
 Write-Step "9/9" "Starting all services"
 
-$svcs = @("mediamtx", "stream-api", "stream-clipper", "fb-relay")
+$svcs = @("mediamtx", "stream-api", "stream-clipper")
 foreach ($svc in $svcs) {
     Start-Service $svc -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 1
