@@ -149,12 +149,12 @@
   // These values are configured from the StreamOps dashboard
   // They are stored in localStorage and read here
   const STREAM_CONFIG = {
-    hlsUrl     : '/hls/stream/index.m3u8',
-    statusApi  : '/api/status',
+    hlsUrl     : null,             // populated dynamically from /api/streams
+    statusApi  : '/api/streams',   // MediaMTX live-path detection endpoint
     eventName  : localStorage.getItem('sv_eventName')  || 'Live Broadcast',
     orgName    : localStorage.getItem('sv_orgName')    || '',
     eventDate  : localStorage.getItem('sv_eventDate')  || '',
-    pollInterval: 10000,   // Check stream status every 10 seconds
+    pollInterval: 10000,           // Check stream status every 10 seconds
   };
 </script>
 <script src="player.js"></script>

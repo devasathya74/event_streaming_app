@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
 </head>
 <body>
 
@@ -69,6 +70,11 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       Documentation
     </li>
+    <li class="nav-item" data-tab="clips" onclick="switchTab('clips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><line x1="1" y1="12" x2="16" y2="12"/><line x1="8" y1="5" x2="8" y2="19"/></svg>
+      AI Clips
+      <span class="nav-badge" id="clipsNavBadge" style="display:none">NEW</span>
+    </li>
   </ul>
 
   <div class="sidebar-footer">
@@ -76,7 +82,13 @@
       <span class="uptime-label">Uptime</span>
       <span class="uptime-value" id="uptimeDisplay">—</span>
     </div>
-    <div class="version-tag">v2.0 Production</div>
+    <div class="version-tag">v4.0 Windows + AI</div>
+    <div style="padding:8px 12px;margin-top:4px">
+      <label style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px">API Token</label>
+      <input type="password" id="apiTokenInput" placeholder="Paste token here..."
+        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:0.72rem;font-family:var(--mono);outline:none"
+        onchange="STATE.apiToken=this.value;localStorage.setItem('apiToken',this.value);showToast('API token saved','success')" />
+    </div>
   </div>
 </nav>
 
@@ -184,7 +196,7 @@
 
           <div class="pipeline-arrow" id="arrow1">
             <div class="arrow-line"></div>
-            <div class="arrow-label">RTMP :1935</div>
+            <div class="arrow-label">RTMP :1985</div>
             <div class="arrow-head">→</div>
           </div>
 
@@ -274,7 +286,7 @@
           </div>
           <div class="config-row">
             <span class="config-label">Server</span>
-            <code class="config-value" id="obsServerUrl">rtmp://[SERVER_IP]:1935/live</code>
+            <code class="config-value" id="obsServerUrl">rtmp://[SERVER_IP]:1985/live</code>
             <button class="copy-btn" onclick="copyText('obsServerUrl')">⎘</button>
           </div>
           <div class="config-row">
@@ -341,6 +353,37 @@
       <h1>Live Streams</h1>
       <p>Monitor active stream connections and platform delivery status</p>
     </div>
+
+    <!-- ► LIVE PREVIEW PLAYER -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <h2>📺 Live Preview</h2>
+        <div class="card-actions">
+          <span class="badge" id="previewStreamBadge" style="min-width:80px;text-align:center">NO SIGNAL</span>
+          <button class="btn-sm btn-outline" onclick="togglePreviewMute()" id="btnPreviewMute">🔇 Unmute</button>
+          <button class="btn-sm btn-outline" onclick="openViewer()">&#8599; Viewer Page</button>
+        </div>
+      </div>
+      <!-- Video player area -->
+      <div id="livePreviewWrap" style="position:relative;background:#030712;min-height:240px;border-radius:0 0 12px 12px;overflow:hidden">
+        <video id="livePreviewVideo"
+          style="width:100%;max-height:420px;display:block;object-fit:contain;background:#000"
+          muted autoplay playsinline></video>
+        <!-- No-signal overlay -->
+        <div id="livePreviewOverlay"
+          style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(3,7,18,0.92);pointer-events:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="1.2" width="72" height="72">
+            <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+            <line x1="1" y1="1" x2="23" y2="23" stroke="#dc2626"/>
+          </svg>
+          <p style="color:#6b7280;font-size:0.9rem;margin:0">Waiting for OBS stream…</p>
+          <code id="previewHlsUrl" style="color:#86efac;font-size:0.78rem;background:rgba(0,0,0,0.4);padding:4px 12px;border-radius:6px">http://[IP]:8888/live/index.m3u8</code>
+          <p style="color:#374151;font-size:0.72rem;margin:0">Auto-connects when OBS starts streaming to <strong style="color:#9ca3af">rtmp://[IP]:1985/live</strong></p>
+        </div>
+      </div>
+    </div>
+    <!-- END LIVE PREVIEW PLAYER -->
+
     <div class="cards-row">
       <div class="stream-platform-card" id="ytCard">
         <div class="platform-header yt">
@@ -356,7 +399,7 @@
           <div class="platform-detail-row"><span>Bitrate</span><span id="ytBitrate">—</span></div>
         </div>
         <div class="platform-actions">
-          <a href="https://studio.youtube.com" target="_blank" class="btn-sm btn-outline">Open Studio ↗</a>
+          <a href="https://studio.youtube.com" target="_blank" class="btn-sm btn-outline">Open Studio &#8599;</a>
         </div>
       </div>
 
@@ -374,7 +417,7 @@
           <div class="platform-detail-row"><span>Status</span><span id="fbDetailStatus" class="status-text">—</span></div>
         </div>
         <div class="platform-actions">
-          <a href="https://www.facebook.com/live/producer" target="_blank" class="btn-sm btn-outline">Open Producer ↗</a>
+          <a href="https://www.facebook.com/live/producer" target="_blank" class="btn-sm btn-outline">Open Producer &#8599;</a>
           <button class="btn-sm btn-warning" onclick="restartFBRelay()">Restart Relay</button>
         </div>
       </div>
@@ -385,11 +428,10 @@
       <table class="data-table">
         <thead><tr><th>Port</th><th>Protocol</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
         <tbody id="portTableBody">
-          <tr><td>1935</td><td>TCP</td><td>RTMP Ingress from OBS</td><td><span class="badge" id="port1935Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(1935)">Test</button></td></tr>
-          <tr><td>80</td><td>TCP</td><td>Public HLS Viewer (NEW)</td><td><span class="badge" id="port80Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(80)">Test</button></td></tr>
-          <tr><td>8080</td><td>TCP</td><td>Nginx Stat/Health Page</td><td><span class="badge" id="port8080Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(8080)">Test</button></td></tr>
-          <tr><td>22</td><td>TCP</td><td>SSH Management</td><td><span class="badge success">Secure</span></td><td>—</td></tr>
-          <tr><td>1936</td><td>TCP</td><td>Local FFmpeg fbsink</td><td><span class="badge" id="port1936Badge">Internal</span></td><td>—</td></tr>
+          <tr><td>1985</td><td>TCP</td><td>RTMP Ingress from OBS (MediaMTX)</td><td><span class="badge" id="port1935Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(1985)">Test</button></td></tr>
+          <tr><td>8888</td><td>TCP</td><td>Public HLS Stream (MediaMTX)</td><td><span class="badge" id="port80Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(8888)">Test</button></td></tr>
+          <tr><td>3000</td><td>TCP</td><td>Management API + Dashboard</td><td><span class="badge" id="port8080Badge">Checking...</span></td><td><button class="btn-xs" onclick="checkPort(3000)">Test</button></td></tr>
+          <tr><td>8889</td><td>TCP</td><td>WebRTC Low-Latency (MediaMTX)</td><td><span class="badge" id="port1936Badge">Optional</span></td><td>—</td></tr>
         </tbody>
       </table>
     </div>
@@ -472,6 +514,7 @@
         <div class="key-input-group">
           <input type="password" id="ytKeyInput" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" class="key-input" />
           <button class="btn-toggle-vis" onclick="toggleVis('ytKeyInput')">👁</button>
+          <button class="btn-sm btn-primary" onclick="saveKeys()" style="margin-left:8px">Save</button>
         </div>
         <div class="key-instructions">
           <strong>How to get:</strong> YouTube Studio → Go Live → Stream → Copy Stream Key
@@ -493,6 +536,7 @@
         <div class="key-input-group">
           <input type="password" id="fbKeyInput" placeholder="FB-XXXXXXXXX-0-xxxxxxxxxx" class="key-input" />
           <button class="btn-toggle-vis" onclick="toggleVis('fbKeyInput')">👁</button>
+          <button class="btn-sm btn-primary" onclick="saveKeys()" style="margin-left:8px">Save</button>
         </div>
         <div class="key-instructions">
           <strong>How to get:</strong> Facebook → Professional Dashboard → Live Video → Use Stream Key
@@ -528,9 +572,9 @@
     </div>
 
     <div class="log-tabs">
-      <button class="log-tab-btn active" onclick="switchLog('nginx')" id="lbNginx">Nginx Error Log</button>
+      <button class="log-tab-btn active" onclick="switchLog('mediamtx')" id="lbNginx">MediaMTX Log</button>
       <button class="log-tab-btn" onclick="switchLog('ffmpeg')" id="lbFFmpeg">FFmpeg FB Relay</button>
-      <button class="log-tab-btn" onclick="switchLog('watchdog')" id="lbWatchdog">Watchdog</button>
+      <button class="log-tab-btn" onclick="switchLog('watchdog')" id="lbWatchdog">API / Watchdog</button>
       <div class="log-controls">
         <button class="btn-sm" onclick="clearLog()">Clear</button>
         <label class="toggle-label small"><input type="checkbox" id="autoScrollToggle" checked /> Auto-scroll</label>
@@ -546,11 +590,11 @@
     </div>
 
     <div class="log-commands-ref">
-      <strong>Shell commands to follow logs in terminal:</strong>
+      <strong>Real-time log commands (PowerShell):</strong>
       <div class="cmd-ref-grid">
-        <code>sudo tail -f /var/log/nginx/error.log</code>
-        <code>tail -f /opt/streaming-backend/logs/ffmpeg/fb_relay.log</code>
-        <code>tail -f /opt/streaming-backend/logs/watchdog.log</code>
+        <code>Get-Content C:\streaming-backend\logs\mediamtx.log -Wait -Tail 50</code>
+        <code>Get-Content C:\streaming-backend\logs\fb_relay.log -Wait -Tail 50</code>
+        <code>Get-Content C:\streaming-backend\logs\api.log -Wait -Tail 50</code>
       </div>
     </div>
   </div>
@@ -629,12 +673,12 @@
       </div>
       <div style="padding:22px">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:0.9rem;color:#86efac;word-break:break-all" id="viewerPublicUrl">http://[SERVER_IP]/watch</code>
+          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:0.9rem;color:#86efac;word-break:break-all" id="viewerPublicUrl">http://[SERVER_IP]:3000/watch</code>
           <button class="btn-sm btn-primary" onclick="copyViewerUrl()">⎘ Copy Link</button>
           <button class="btn-sm btn-outline" onclick="openViewer()" id="btnOpenViewer">↗ Open</button>
         </div>
         <div style="display:flex;gap:10px;align-items:center">
-          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-family:var(--mono);font-size:0.78rem;color:#7dd3fc;word-break:break-all" id="viewerHlsUrl">http://[SERVER_IP]/hls/stream/index.m3u8</code>
+          <code style="flex:1;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-family:var(--mono);font-size:0.78rem;color:#7dd3fc;word-break:break-all" id="viewerHlsUrl">http://[SERVER_IP]:8888/live/[stream-key]/index.m3u8</code>
           <button class="btn-xs" onclick="copyHlsUrl()">VLC URL</button>
         </div>
         <p style="font-size:0.78rem;color:var(--text-muted);margin-top:10px">📱 Share via WhatsApp, SMS, or email — works in any browser on any device. No app install needed.</p>
@@ -686,16 +730,16 @@
               <span id="hlsSegStatus" class="badge">—</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
-              <span style="color:var(--text-muted)">Segment Age</span>
+              <span style="color:var(--text-muted)">Stream Latency</span>
               <span id="hlsSegAge" style="font-family:var(--mono)">—</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
-              <span style="color:var(--text-muted)">Port 80</span>
+              <span style="color:var(--text-muted)">Port 8888 (HLS)</span>
               <span id="hlsPort80" class="badge">—</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
-              <span style="color:var(--text-muted)">HLS Directory</span>
-              <span style="font-family:var(--mono);font-size:0.75rem;color:var(--text-secondary)">/var/www/html/hls/</span>
+              <span style="color:var(--text-muted)">HLS Server</span>
+              <span style="font-family:var(--mono);font-size:0.75rem;color:var(--text-secondary)">MediaMTX :8888</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:0.84rem">
               <span style="color:var(--text-muted)">Viewer Files</span>
@@ -703,8 +747,8 @@
             </div>
           </div>
           <div style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.25);border-radius:8px;font-size:0.78rem;color:var(--text-muted)">
-            <strong style="color:var(--text-primary)">Shell command to run:</strong><br/>
-            <code style="color:#86efac">sudo bash /opt/streaming-backend/scripts/serve_hls.sh</code>
+            <strong style="color:var(--text-primary)">VLC / direct HLS playback:</strong><br/>
+            <code style="color:#86efac">http://[SERVER_IP]:8888/live/[stream-key]/index.m3u8</code>
           </div>
         </div>
       </div>
@@ -746,6 +790,79 @@
     </div>
 
     <div class="docs-grid" id="docsGrid"></div>
+  </div>
+
+  <!-- ══════════ TAB: AI CLIPS ══════════ -->
+  <div class="tab-content" id="tab-clips">
+    <div class="page-header">
+      <h1>🎬 AI Highlight Clips</h1>
+      <p>Automatically detected moments from your live stream — audio peaks and scene changes</p>
+    </div>
+
+    <div class="cards-row" style="margin-bottom:20px">
+      <div class="stat-card">
+        <div class="stat-card-icon" style="background:linear-gradient(135deg,#7c3aed,#4f46e5)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Total Clips</div>
+          <div class="stat-card-value" id="clipsTotal">0</div>
+        </div>
+        <div class="stat-card-badge" id="clipperBadge">IDLE</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon" style="background:linear-gradient(135deg,#0891b2,#0e7490)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <div class="stat-card-info">
+          <div class="stat-card-label">Last Clip</div>
+          <div class="stat-card-value" id="clipsLastTime">—</div>
+        </div>
+        <div class="stat-card-badge success">AUTO</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <h2>⚡ Manual Clip Trigger</h2>
+        <div class="card-actions">
+          <button class="btn-sm btn-success" onclick="triggerClip()" id="btnTriggerClip">✂ Cut Clip Now</button>
+          <button class="btn-sm btn-outline" onclick="loadClips()">↺ Refresh</button>
+        </div>
+      </div>
+      <div style="padding:18px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Clip Duration (seconds)</label>
+          <input type="number" id="clipDurationInput" value="90" min="10" max="300"
+            style="width:100px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:0.9rem" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+          <label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Label / Description</label>
+          <input type="text" id="clipLabelInput" placeholder="e.g. Award ceremony moment"
+            style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:0.85rem" />
+        </div>
+      </div>
+      <div style="padding:0 18px 16px;font-size:0.8rem;color:var(--text-muted);display:flex;gap:16px">
+        <span>🔊 Auto-trigger: audio peak &gt; −14 dBFS</span>
+        <span>🎬 Auto-trigger: scene cuts &gt; 8/min</span>
+        <span>⏱ Cooldown: 2 min between auto-clips</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>📂 Clip Gallery</h2>
+        <div class="card-actions">
+          <span id="clipsGalleryCount" style="font-size:0.8rem;color:var(--text-muted)">Loading...</span>
+        </div>
+      </div>
+      <div id="clipsGallery" style="padding:20px;min-height:120px">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)">
+          <div style="font-size:2.5rem;margin-bottom:12px">🎬</div>
+          <div>No clips yet. Start streaming — clips appear automatically when highlights are detected.</div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </main>

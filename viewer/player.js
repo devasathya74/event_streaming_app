@@ -52,31 +52,24 @@ function applyConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// STREAM STATUS CHECK
+// STREAM STATUS CHECK — uses /api/streams (MediaMTX live paths)
 // ═══════════════════════════════════════════════════════════
 async function checkStreamStatus() {
   try {
     const resp = await fetch(STREAM_CONFIG.statusApi + '?t=' + Date.now());
-
     if (resp.ok) {
       const data = await resp.json();
-      const isLive = data.status === 'live';
+      // /api/streams returns { streams: [{path, hls_url}], count: N }
+      const streams = data.streams || [];
+      const isLive  = streams.length > 0;
+      if (isLive && streams[0].hls_url) {
+        // Auto-set the correct HLS URL (e.g. live/mystream/index.m3u8)
+        STREAM_CONFIG.hlsUrl = streams[0].hls_url;
+      }
       handleStatusChange(isLive);
     } else {
-      // Fall back to HLS playlist direct check
-      fallbackHLSCheck();
+      handleStatusChange(false);
     }
-  } catch {
-    // Network error — try HLS direct
-    fallbackHLSCheck();
-  }
-}
-
-async function fallbackHLSCheck() {
-  try {
-    const resp = await fetch(STREAM_CONFIG.hlsUrl + '?t=' + Date.now(),
-      { method: 'HEAD', cache: 'no-store' });
-    handleStatusChange(resp.ok);
   } catch {
     handleStatusChange(false);
   }
