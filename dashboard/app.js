@@ -260,16 +260,33 @@ const DOCS_DATA = [
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initClock();
   initUptime();
   initChecklist();
   initEmergency();
   initDocs();
   loadServerIp();
-  // Load API token from local storage
-  const savedToken = localStorage.getItem('apiToken');
-  if (savedToken) STATE.apiToken = savedToken;
+  
+  // ─── Senior Architect: API Token Auto-Discovery ───
+  // First check local storage (user preference)
+  let token = localStorage.getItem('apiToken');
+  if (!token) {
+    // If no token, attempt auto-discovery from local API
+    try {
+      const authRes = await fetch(`${API_BASE}/api/token`);
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        if (authData.token) {
+          token = authData.token;
+          localStorage.setItem('apiToken', token);
+          console.log('✅ API token auto-discovered and saved.');
+        }
+      }
+    } catch (e) { console.warn('Token discovery skipped (non-local or API down)'); }
+  }
+  if (token) STATE.apiToken = token;
+
   runHealthCheck();
   startAutoRefresh();
   startMetricsPoller();
