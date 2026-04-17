@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install.sh — One-Shot Deployment Script
+# install.sh — Master One-Shot Deployment Script (Kali Linux Optimized)
 # =============================================================================
-# This script deploys the entire streaming-backend to /opt/streaming-backend,
-# installs Nginx configs, sets up systemd services, configures the firewall,
-# and validates the installation.
-#
-# Run from the project root directory:
-#   sudo bash install.sh
-#
-# Supported OS: Ubuntu 20.04+, Ubuntu 22.04 LTS, Kali Linux 2022+
+# Purpose: Deploys a production-grade live streaming relay stack.
+# Target: Kali Linux, Ubuntu 22.04+, Debian 11+
 # =============================================================================
 
 set -euo pipefail
 
-# ── Colour codes ──────────────────────────────────────────────────────────────
+# ── Configuration ─────────────────────────────────────────────────────────────
+INSTALL_DIR="/opt/streaming-backend"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STAT_DIR="/var/www/nginx-rtmp"
+VIEWER_DIR="/var/www/html/watch"
+HLS_DIR="/var/www/html/hls"
+
+# ── Color Definitions ──────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
+# ── Helper Functions ──────────────────────────────────────────────────────────
 log_info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 log_warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
@@ -25,316 +27,215 @@ log_step()    { echo -e "\n${BLUE}${BOLD}▶ $*${NC}"; }
 log_success() { echo -e "${GREEN}${BOLD}✓ $*${NC}"; }
 die()         { log_error "$*"; exit 1; }
 
-INSTALL_DIR="/opt/streaming-backend"
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # ── Banner ────────────────────────────────────────────────────────────────────
-echo -e "${CYAN}"
+clear
+echo -e "${CYAN}${BOLD}"
 cat << 'EOF'
-╔══════════════════════════════════════════════════════════╗
-║     Live Streaming Backend — Installer                   ║
-║     OBS → Nginx RTMP → YouTube + Facebook Live           ║
-╚══════════════════════════════════════════════════════════╝
+    ____        __ _                                _  _ 
+   / ___| _ __  / _(_) __ _ _ __ __ ___   _(_) |_ _   | || |
+  | |  _ | '__|| |_| |/ _` | '__/ _` \ \ / / | __| | | | || |_
+  | |_| || |   |  _| | (_| | | | (_| |\ V /| | |_| |_| |__   _|
+   \____||_|   |_| |_|\__, |_|  \__,_| \_/ |_|\__|\__, |  |_|
+                      |___/                       |___/ 
+      LIVE STREAMING BACKEND — KALI MASTER INSTALLER
 EOF
 echo -e "${NC}"
 
-# ── Root check ────────────────────────────────────────────────────────────────
+# ── Phase 1: Environment Validation ───────────────────────────────────────────
+log_step "Phase 1: Environment Validation"
+
+# 1.1 Root check
 [[ $EUID -ne 0 ]] && die "This script must be run as root. Use: sudo bash install.sh"
 
-# ── OS check ─────────────────────────────────────────────────────────────────
-if ! grep -qi "ubuntu\|debian\|kali" /etc/os-release 2>/dev/null; then
-    log_warn "OS not detected as Ubuntu/Debian/Kali. Proceeding anyway — adjust package names if needed."
+# 1.2 OS check
+if ! grep -qi "kali\|ubuntu\|debian" /etc/os-release; then
+    log_warn "OS not officially supported. Kali/Ubuntu/Debian recommended."
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 1 of 9 — Install required packages"
-# ═══════════════════════════════════════════════════════════════════════════════
+# 1.3 Port 80 Conflict Check
+if ss -tlnp 2>/dev/null | grep ':80 ' | grep -q 'apache'; then
+    log_warn "Apache is running on port 80. Nginx requires this port."
+    read -p "Disable Apache and proceed? [y/N] " confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        systemctl stop apache2 2>/dev/null || true
+        systemctl disable apache2 2>/dev/null || true
+        log_info "Apache disabled."
+    else
+        die "Port 80 conflict. Please stop the application using port 80."
+    fi
+fi
+
+# ── Phase 2: Dependency Management ────────────────────────────────────────────
+log_step "Phase 2: Dependency Management"
 
 apt-get update -qq
-
-PACKAGES=(nginx libnginx-mod-rtmp ffmpeg curl ufw fail2ban bc)
-MISSING=()
+PACKAGES=(nginx libnginx-mod-rtmp ffmpeg curl ufw rsync bc python3)
 
 for pkg in "${PACKAGES[@]}"; do
     if ! dpkg -l "$pkg" &>/dev/null; then
-        MISSING+=("$pkg")
+        log_info "Installing $pkg..."
+        apt-get install -y "$pkg" -qq
     else
         log_info "$pkg is already installed."
     fi
 done
 
-if [[ ${#MISSING[@]} -gt 0 ]]; then
-    log_info "Installing: ${MISSING[*]}"
-    apt-get install -y "${MISSING[@]}"
+log_success "Dependencies ready."
+
+# ── Phase 3: Project Deployment ───────────────────────────────────────────────
+log_step "Phase 3: Project Deployment"
+
+mkdir -p "$INSTALL_DIR"
+log_info "Deploying files to $INSTALL_DIR..."
+rsync -a --exclude='.git' "${SOURCE_DIR}/" "$INSTALL_DIR/"
+
+mkdir -p "$INSTALL_DIR/logs/"{nginx,ffmpeg,rtmp}
+mkdir -p "$STAT_DIR" "$VIEWER_DIR" "$HLS_DIR"
+mkdir -p /var/recordings /var/www/html/clips
+chown -R www-data:www-data /var/recordings /var/www/html/clips
+chown -R www-data:www-data "$HLS_DIR" "$VIEWER_DIR"
+
+log_info "Deploying Nginx configurations..."
+cp "$INSTALL_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
+cp "$INSTALL_DIR/nginx/rtmp.conf"  /etc/nginx/rtmp.conf
+
+log_info "Deploying HLS Viewer assets..."
+if [[ -d "$INSTALL_DIR/viewer" ]]; then
+    cp -r "$INSTALL_DIR/viewer/"* "$VIEWER_DIR/"
 fi
 
-# Verify nginx has RTMP module
-if ! nginx -V 2>&1 | grep -q "rtmp"; then
-    log_warn "nginx-rtmp-module not detected in nginx -V output."
-    log_warn "If streaming fails, see docs/setup_guide.md → 'Build from source' section."
-else
-    log_info "nginx-rtmp-module confirmed."
-fi
+chmod +x "$INSTALL_DIR/scripts/"*.sh
+chmod 600 "$INSTALL_DIR/keys/stream_keys.env"
+chown root:root "$INSTALL_DIR/keys/stream_keys.env"
 
-# Verify FFmpeg has RTMPS support
-if ! ffmpeg -protocols 2>/dev/null | grep -q "rtmps"; then
-    log_warn "FFmpeg may not support RTMPS. Install a newer build if Facebook relay fails."
-else
-    log_info "FFmpeg RTMPS support confirmed."
-fi
+log_success "Deployment complete."
 
-log_success "Packages ready."
+# ── Phase 4: Stream Key Configuration (Optional) ─────────────────────────────
+log_step "Phase 4: Stream Key Configuration (Optional)"
 
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 2 of 9 — Create installation directory"
-# ═══════════════════════════════════════════════════════════════════════════════
+KEYS_FILE="$INSTALL_DIR/keys/stream_keys.env"
+RTMP_CONF="/etc/nginx/rtmp.conf"
 
-if [[ "$SOURCE_DIR" == "$INSTALL_DIR" ]]; then
-    log_info "Already running from $INSTALL_DIR — skipping copy."
-else
-    log_info "Copying project to $INSTALL_DIR ..."
-    mkdir -p "$INSTALL_DIR"
-    # Copy all project files (exclude .git)
-    rsync -a --exclude='.git' "${SOURCE_DIR}/" "${INSTALL_DIR}/"
-    log_info "Files copied to $INSTALL_DIR"
-fi
+setup_keys() {
+    echo -e "${CYAN}Enter stream keys now or leave blank to set later via Dashboard:${NC}"
+    
+    # Load defaults
+    source "$KEYS_FILE"
 
-# Create log directories
-mkdir -p \
-    "${INSTALL_DIR}/logs/nginx" \
-    "${INSTALL_DIR}/logs/ffmpeg" \
-    "${INSTALL_DIR}/logs/rtmp" \
-    /var/log/nginx
-
-log_success "Directory structure ready at $INSTALL_DIR"
-
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 3 of 9 — Set file permissions"
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Make all scripts executable
-chmod +x "${INSTALL_DIR}/scripts/"*.sh
-
-# Protect stream keys
-chmod 600 "${INSTALL_DIR}/keys/stream_keys.env"
-chown root:root "${INSTALL_DIR}/keys/stream_keys.env"
-
-# Allow nginx (www-data) to write to nginx log dir
-chown -R www-data:www-data /var/log/nginx 2>/dev/null || true
-chmod 755 "${INSTALL_DIR}/logs"
-
-log_success "Permissions set."
-
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 4 of 9 — Deploy Nginx configuration"
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Backup existing config
-if [[ -f /etc/nginx/nginx.conf ]]; then
-    BACKUP="/etc/nginx/nginx.conf.bak.$(date +%Y%m%d_%H%M%S)"
-    cp /etc/nginx/nginx.conf "$BACKUP"
-    log_info "Backed up existing nginx.conf to $BACKUP"
-fi
-
-# Copy configs
-cp "${INSTALL_DIR}/nginx/nginx.conf" /etc/nginx/nginx.conf
-cp "${INSTALL_DIR}/nginx/rtmp.conf"  /etc/nginx/rtmp.conf
-
-# Verify config
-if nginx -t 2>&1 | grep -q "successful"; then
-    log_success "Nginx configuration is valid."
-else
-    log_error "Nginx configuration validation FAILED."
-    log_error "Check: nginx -t"
-    nginx -t 2>&1 || true
-    die "Fix nginx.conf errors and re-run install.sh"
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 5 of 9 — Set up Nginx RTMP stat page assets"
-# ═══════════════════════════════════════════════════════════════════════════════
-
-STAT_DIR="/var/www/nginx-rtmp"
-mkdir -p "$STAT_DIR"
-
-if [[ ! -f "${STAT_DIR}/stat.xsl" ]]; then
-    log_info "Downloading stat.xsl stylesheet..."
-    if curl -sf --max-time 15 -o "${STAT_DIR}/stat.xsl" \
-        "https://raw.githubusercontent.com/arut/nginx-rtmp-module/master/stat.xsl"; then
-        log_success "stat.xsl downloaded."
-    else
-        log_warn "Could not download stat.xsl (no internet or GitHub unreachable)."
-        log_warn "RTMP stat page will still work, but without the styled view."
-        # Create minimal placeholder
-        echo '<?xml version="1.0"?><xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"><html><body><pre><xsl:value-of select="."/></pre></body></html></xsl:template></xsl:stylesheet>' > "${STAT_DIR}/stat.xsl"
-    fi
-else
-    log_info "stat.xsl already exists — skipping download."
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 6 of 9 — Install systemd service units"
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Patch ExecStart paths in service files to match actual install dir
-for service_src in "${INSTALL_DIR}/systemd/"*.service; do
-    service_name="$(basename "$service_src")"
-    service_dest="/etc/systemd/system/${service_name}"
-
-    # Replace /opt/streaming-backend with actual install dir if different
-    if [[ "$INSTALL_DIR" != "/opt/streaming-backend" ]]; then
-        sed "s|/opt/streaming-backend|${INSTALL_DIR}|g" \
-            "$service_src" > "$service_dest"
-    else
-        cp "$service_src" "$service_dest"
+    read -p "YouTube Key [${YT_STREAM_KEY:-None}]: " new_yt
+    if [[ -n "$new_yt" ]]; then
+        sed -i "s|YT_STREAM_KEY=.*|YT_STREAM_KEY=\"$new_yt\"|g" "$KEYS_FILE"
+        # Update rtmp.conf block
+        sed -i "/# YT_PUSH_START/,/# YT_PUSH_END/{ /# push/c\    push rtmp://a.rtmp.youtube.com/live2/$new_yt;" "$RTMP_CONF"
+        log_info "YouTube key updated."
     fi
 
-    log_info "Installed: $service_dest"
+    read -p "Facebook Key [${FB_STREAM_KEY:-None}]: " new_fb
+    if [[ -n "$new_fb" ]]; then
+        sed -i "s|FB_STREAM_KEY=.*|FB_STREAM_KEY=\"$new_fb\"|g" "$KEYS_FILE"
+        sed -i "/# FB_PUSH_START/,/# FB_PUSH_END/{ /# push/c\    push rtmp://127.0.0.1:1936/fbsink/stream;" "$RTMP_CONF"
+        log_info "Facebook key updated."
+    fi
+}
+
+read -p "Configure stream keys now? [y/N] " do_keys
+if [[ $do_keys =~ ^[Yy]$ ]]; then setup_keys; fi
+
+log_success "Key configuration handled."
+
+# ── Phase 5: System Services ─────────────────────────────────────────────────
+log_step "Phase 5: System Services"
+
+for service in "$INSTALL_DIR/systemd/"*.service; do
+    s_name=$(basename "$service")
+    log_info "Installing service: $s_name"
+    sed "s|/opt/streaming-backend|$INSTALL_DIR|g" "$service" > "/etc/systemd/system/$s_name"
 done
 
 systemctl daemon-reload
 
-# Enable services for auto-start on boot
-systemctl enable nginx-rtmp
-systemctl enable fb-relay
-systemctl enable watchdog
+# Validate nginx config BEFORE trying to start nginx-rtmp
+log_info "Validating nginx config..."
+if ! nginx -t 2>&1; then
+    log_error "Nginx config is invalid — fixing and retrying..."
+    # Emergency: copy configs from install dir to /etc/nginx
+    cp "$INSTALL_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
+    cp "$INSTALL_DIR/nginx/rtmp.conf"  /etc/nginx/rtmp.conf
+    if ! nginx -t 2>&1; then
+        log_error "Still invalid. Check: nginx -t"
+        log_error "Common fix: libnginx-mod-rtmp not installed"
+        log_info  "Run: apt-get install -y libnginx-mod-rtmp"
+    fi
+fi
 
-log_success "systemd units installed and enabled."
+SERVICES=("nginx-rtmp" "fb-relay" "watchdog" "stream-api" "stream-clipper")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 7 of 9 — Configure Firewall (UFW)"
-# ═══════════════════════════════════════════════════════════════════════════════
+for s in "${SERVICES[@]}"; do
+    log_info "Starting $s..."
+    if systemctl enable "$s" --now 2>/dev/null; then
+        log_info "  ✓ $s started"
+    else
+        log_warn "  ✗ $s failed — journalctl -u $s -n 20"
+    fi
+done
+
+log_success "Services processed."
+
+# ── Phase 6: Permission Hardening ────────────────────────────────────────────
+log_step "Phase 6: Permission Hardening"
+
+log_info "Configuring sudoers for management API..."
+cat > /etc/sudoers.d/streaming-ops <<EOF
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nginx-rtmp
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nginx-rtmp
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart fb-relay
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart watchdog
+EOF
+chmod 440 /etc/sudoers.d/streaming-ops
+
+log_success "Permissions set."
+
+# ── Phase 7: Security Hardening ──────────────────────────────────────────────
+log_step "Phase 7: Security Hardening"
 
 if command -v ufw &>/dev/null; then
-    # Set defaults
-    ufw --force default deny incoming  > /dev/null
-    ufw --force default allow outgoing > /dev/null
-
-    # SSH — allow from everywhere (user can restrict later)
-    ufw allow 22/tcp comment "SSH management" > /dev/null
-
-    # RTMP ingest — allow from everywhere by default
-    # To restrict to OBS machine IP, edit and run:
-    #   ufw delete allow 1935/tcp
-    #   ufw allow from [OBS_IP] to any port 1935 proto tcp
-    ufw allow 1935/tcp comment "RTMP from OBS" > /dev/null
-
-    # Port 8080 (RTMP stat page) — internal only, do NOT open publicly
-    # Access via: ssh -L 8080:127.0.0.1:8080 user@server
-
-    # Enable UFW non-interactively
+    log_info "Configuring UFW Firewall..."
+    ufw allow 22/tcp    comment "SSH Access"
+    ufw allow 80/tcp    comment "Public HLS Viewer"
+    ufw allow 1935/tcp  comment "RTMP Ingest"
     ufw --force enable > /dev/null
+fi
 
-    log_success "UFW firewall configured."
-    ufw status numbered | head -20
+# ── Phase 9: Final Validation ─────────────────────────────────────────────────
+log_step "Phase 8: Final Validation"
+
+if nginx -t 2>&1 | grep -q "successful"; then
+    log_info "Nginx: OK"
 else
-    log_warn "UFW not found. Configure your firewall manually. Required: allow TCP 1935."
+    log_error "Nginx configuration error! Check: nginx -t"
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 8 of 9 — Validate stream keys configuration"
-# ═══════════════════════════════════════════════════════════════════════════════
+for s in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$s"; then
+        log_info "$s: ACTIVE"
+    else
+        log_warn "$s: FAILED TO START"
+    fi
+done
 
-KEYS_FILE="${INSTALL_DIR}/keys/stream_keys.env"
-# shellcheck source=/dev/null
-source "$KEYS_FILE"
+# ── Summary ───────────────────────────────────────────────────────────────────
+IP_ADDR=$(hostname -I | awk '{print $1}')
 
-KEYS_NEED_UPDATE=false
+API_TOKEN=$(cat "$INSTALL_DIR/keys/api_token" 2>/dev/null || echo "[generated on first start]")
 
-if [[ "${YT_STREAM_KEY:-}" == *"YOUR_YOUTUBE"* ]] || [[ -z "${YT_STREAM_KEY:-}" ]]; then
-    log_warn "⚠ YouTube stream key is still a placeholder."
-    KEYS_NEED_UPDATE=true
-else
-    log_info "✓ YouTube stream key is set."
-fi
-
-if [[ "${FB_STREAM_KEY:-}" == *"YOUR_FACEBOOK"* ]] || [[ -z "${FB_STREAM_KEY:-}" ]]; then
-    log_warn "⚠ Facebook stream key is still a placeholder."
-    KEYS_NEED_UPDATE=true
-else
-    log_info "✓ Facebook stream key is set."
-fi
-
-if [[ "$KEYS_NEED_UPDATE" == true ]]; then
-    echo ""
-    log_warn "ACTION REQUIRED: Update stream keys before starting the relay."
-    echo -e "  ${CYAN}sudo nano ${KEYS_FILE}${NC}"
-    echo ""
-fi
-
-# Check rtmp.conf for placeholder YouTube key
-if grep -q "\[YT_STREAM_KEY\]" /etc/nginx/rtmp.conf; then
-    log_warn "⚠ /etc/nginx/rtmp.conf still contains [YT_STREAM_KEY] placeholder."
-    log_warn "  Edit it: sudo nano /etc/nginx/rtmp.conf"
-    log_warn "  Then reload: sudo nginx -s reload"
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-log_step "Step 9 of 9 — Start services"
-# ═══════════════════════════════════════════════════════════════════════════════
-
-log_info "Starting nginx-rtmp..."
-systemctl start nginx-rtmp
-sleep 2
-
-if systemctl is-active --quiet nginx-rtmp; then
-    log_success "nginx-rtmp is running."
-else
-    log_warn "nginx-rtmp failed to start. Check: journalctl -u nginx-rtmp -n 30"
-fi
-
-log_info "Starting fb-relay..."
-systemctl start fb-relay
-sleep 2
-
-if systemctl is-active --quiet fb-relay; then
-    log_success "fb-relay is running."
-else
-    log_warn "fb-relay failed to start (may need stream keys set first)."
-fi
-
-log_info "Starting watchdog..."
-systemctl start watchdog
-sleep 1
-
-if systemctl is-active --quiet watchdog; then
-    log_success "watchdog is running."
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Final Summary
-# ═══════════════════════════════════════════════════════════════════════════════
-
-SERVER_IP=$(hostname -I | awk '{print $1}')
-
-echo ""
-echo -e "${CYAN}${BOLD}══════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}  Installation Complete${NC}"
-echo -e "${CYAN}${BOLD}══════════════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "  Install directory : ${CYAN}${INSTALL_DIR}${NC}"
-echo -e "  OBS Server URL    : ${GREEN}rtmp://${SERVER_IP}:1935/live${NC}"
-echo -e "  OBS Stream Key    : ${GREEN}stream${NC}"
-echo -e "  RTMP Stat page    : ${CYAN}http://127.0.0.1:8080/stat${NC} (local only)"
-echo ""
-echo -e "  ${YELLOW}Next steps:${NC}"
-
-if [[ "$KEYS_NEED_UPDATE" == true ]]; then
-echo -e "  ${RED}1. Add your stream keys:${NC}"
-echo -e "     sudo nano ${KEYS_FILE}"
-echo -e "     sudo nano /etc/nginx/rtmp.conf   (replace [YT_STREAM_KEY])"
-echo -e "     sudo nginx -s reload"
-echo -e "     sudo systemctl restart fb-relay"
-echo ""
-fi
-
-echo -e "  2. Run pre-event validation:"
-echo -e "     ${CYAN}sudo bash ${INSTALL_DIR}/scripts/pre_event_test.sh${NC}"
-echo ""
-echo -e "  3. Read the docs:"
-echo -e "     ${INSTALL_DIR}/docs/obs_setup.md         ← OBS configuration"
-echo -e "     ${INSTALL_DIR}/docs/event_checklist.md   ← Event day runbook"
-echo -e "     ${INSTALL_DIR}/docs/security_guide.md    ← Harden your server"
-echo ""
-echo -e "${CYAN}${BOLD}══════════════════════════════════════════════════════════${NC}"
-echo ""
+echo -e "\n${GREEN}${BOLD}================================================================${NC}"
+echo -e "${GREEN}${BOLD}        STREAMOPS — MASTER DEPLOYMENT COMPLETE                 ${NC}"
+echo -e "${GREEN}${BOLD}================================================================${NC}"
+echo -e "\n  ${BOLD}Public Viewer:${NC}     ${CYAN}http://$IP_ADDR/watch${NC}"
+echo -e "  ${BOLD}Dashboard:${NC}         ${CYAN}http://$IP_ADDR/watch${NC} (→ dashboard tab)"
+echo -e "  ${BOLD}OBS RTMP URL:${NC}      ${CYAN}rtmp://$IP_ADDR:1935/live${NC}"
+echo -e "  ${BOLD}OBS Stream Key:${NC}    ${CYAN}stream${NC} (literal word 'stream')"
+echo -e "  ${BOLD}API Token:${NC}         ${YELLOW}$API_TOKEN${NC}"
+echo -e "\n  ${BOLD}Post-install commands:${NC}"
+echo -e "    ${CYAN}cat /opt/streaming-backend/commands.txt${NC}"
+echo -e "\n${GREEN}${BOLD}================================================================${NC}\n"

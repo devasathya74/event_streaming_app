@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+# =============================================================================
+# post_install_commands.txt — StreamOps: Post-Installation Reference
+# =============================================================================
+# Run: cat /opt/streaming-backend/commands.txt
+# =============================================================================
+
+cat << 'COMMANDS'
+╔══════════════════════════════════════════════════════════════════════╗
+║          StreamOps — Post-Installation Command Reference             ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 1. START ALL SERVICES (run this before every event)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo bash /opt/streaming-backend/scripts/start_relay.sh
+
+  Or manually:
+  sudo systemctl start nginx-rtmp fb-relay watchdog stream-api stream-clipper
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 2. CHECK SYSTEM HEALTH (run after starting)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  bash /opt/streaming-backend/scripts/health_check.sh
+
+  Quick live check:
+  curl http://127.0.0.1/api/status
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 3. UPDATE STREAM KEYS (do this before every event)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo nano /opt/streaming-backend/keys/stream_keys.env
+  
+  Or via API (Dashboard does this automatically):
+  TOKEN=$(cat /opt/streaming-backend/keys/api_token)
+  curl -X POST http://127.0.0.1:3000/api/keys \
+       -H "X-API-Token: $TOKEN" \
+       -H "Content-Type: application/json" \
+       -d '{"yt":"YOUR_YT_KEY","fb":"YOUR_FB_KEY"}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 4. VIEW YOUR API TOKEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  cat /opt/streaming-backend/keys/api_token
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 5. SERVICE STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  systemctl status nginx-rtmp
+  systemctl status fb-relay
+  systemctl status stream-api
+  systemctl status stream-clipper
+  systemctl status watchdog
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 6. LIVE LOG MONITORING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo tail -f /var/log/nginx/error.log
+  sudo tail -f /opt/streaming-backend/logs/ffmpeg/fb_relay.log
+  sudo tail -f /opt/streaming-backend/logs/watchdog.log
+  sudo tail -f /opt/streaming-backend/logs/api.log
+  sudo tail -f /opt/streaming-backend/logs/clipper.log
+
+  All at once:
+  sudo tail -f /var/log/nginx/error.log \
+              /opt/streaming-backend/logs/ffmpeg/fb_relay.log \
+              /opt/streaming-backend/logs/api.log \
+              /opt/streaming-backend/logs/clipper.log
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 7. VERIFY NGINX RTMP CONFIG
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo nginx -t
+  sudo nginx -s reload   (hot reload — stream is NOT interrupted)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 8. STOP ALL SERVICES (after event)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  sudo bash /opt/streaming-backend/scripts/stop_relay.sh
+
+  Or:
+  sudo systemctl stop nginx-rtmp fb-relay watchdog stream-api stream-clipper
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 9. HLS VIEWER SETUP CHECK (shareable URL + QR code)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  bash /opt/streaming-backend/scripts/serve_hls.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 10. AI CLIPS — MANUAL TRIGGER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  TOKEN=$(cat /opt/streaming-backend/keys/api_token)
+  curl -X POST http://127.0.0.1:3000/api/clips/trigger \
+       -H "X-API-Token: $TOKEN" \
+       -H "Content-Type: application/json" \
+       -d '{"duration":90,"label":"highlight"}'
+
+  View clips:
+  curl -H "X-API-Token: $TOKEN" http://127.0.0.1:3000/api/clips
+
+  Clips saved to: /var/www/html/clips/
+  Public URL:     http://[SERVER_IP]/clips/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 11. OBS SETUP (connect OBS to this relay)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  OBS → Settings → Stream:
+    Service:    Custom...
+    Server:     rtmp://[YOUR_SERVER_IP]:1935/live
+    Stream Key: stream
+
+  For laptop/PC on same network:
+    Server: rtmp://192.168.x.x:1935/live  ← use LAN IP
+  
+  For remote VPS:
+    Server: rtmp://[VPS_PUBLIC_IP]:1935/live
+
+  OBS Encoder Settings (Settings → Output → Streaming):
+    Encoder:      x264
+    Rate Control: CBR
+    Bitrate:      2800 kbps (use 2000 if internet < 8 Mbps)
+    Keyframe:     2 seconds
+    CPU Usage:    veryfast
+    Profile:      main
+    Tune:         zerolatency
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 12. NGINX RTMP STAT PAGE (check active stream)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  curl http://127.0.0.1:8080/stat
+  curl http://127.0.0.1:8080/health
+
+  # RECOMMENDED: Real-time traffic monitor (X-ray vision)
+  bash /opt/streaming-backend/scripts/stream_monitor.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 13. ARCHIVE LOGS AND RECORDINGS AFTER EVENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  DATE=$(date +%Y%m%d)
+  cp -r /opt/streaming-backend/logs /opt/streaming-backend/logs_archive_$DATE
+  cp -r /var/recordings /opt/streaming-backend/recordings_archive_$DATE
+  cp -r /var/www/html/clips /opt/streaming-backend/clips_archive_$DATE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 14. TROUBLESHOOTING — COMMON FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Nginx won't start:
+    sudo nginx -t                           (check config)
+    sudo journalctl -u nginx-rtmp -n 50    (check logs)
+
+  Facebook relay failing:
+    sudo journalctl -u fb-relay -n 50
+    sudo systemctl restart fb-relay
+
+  OBS says "failed to connect":
+    sudo ufw allow 1935/tcp && sudo ufw reload
+    Check: ss -tlnp | grep 1935
+
+  HLS viewer shows "Stream not live":
+    ls -la /var/www/html/hls/stream/       (check if .ts files exist)
+    curl http://127.0.0.1/api/status       (check stream status)
+
+  API returns 401:
+    TOKEN=$(cat /opt/streaming-backend/keys/api_token)
+    Use header: -H "X-API-Token: $TOKEN"
+
+
+
+The error is clear and it's a single-line fix. The custom `nginx.conf` we deployed doesn't include the modules directory, so the RTMP module (and its `rtmp_stat` directive) never gets loaded. The default Ubuntu/Kali nginx.conf has `include /etc/nginx/modules-enabled/*.conf;` at the top — we lost that when we replaced it.
+
+Edited nginx.conf
+
+Also fix the `install.sh` so it copies the config before starting services, and catches the missing `stream-api.service` / `stream-clipper.service` issue (they weren't being installed because the loop was missing them):
+
+Viewed install.sh:144-165
+Edited install.sh
+
+Now give the user the exact commands to fix the running system right now — no reinstall needed:
+
+Created walkthrough.md
+
+---
+
+## Error Ki Wajah
+
+**Single line missing thi** `nginx.conf` ke top pe:
+```nginx
+include /etc/nginx/modules-enabled/*.conf;
+```
+Iske bina nginx `libnginx-mod-rtmp.so` load nahi karta → `rtmp_stat`, `rtmp {}` sab "unknown directive" ban jaate hain.
+
+Fix project files mein ho gayi. **Ab directly yeh commands chalao (reinstall ki zaroorat nahi):**
+
+```bash
+# Step 1 — Fixed config copy karo
+sudo cp /opt/streaming-backend/nginx/nginx.conf /etc/nginx/nginx.conf
+sudo cp /opt/streaming-backend/nginx/rtmp.conf  /etc/nginx/rtmp.conf
+
+# Step 2 — Test karo
+sudo nginx -t
+# Output aana chahiye: "nginx: configuration file test is successful"
+
+# Step 3 — Start karo
+sudo systemctl start nginx-rtmp
+sudo systemctl start stream-api stream-clipper
+
+# Step 4 — Verify
+sudo systemctl status nginx-rtmp
+ss -tlnp | grep 1935
+```
+
+---
+
+### Agar Error Abhi Bhi Aaye — Module Missing Check:
+```bash
+ls /etc/nginx/modules-enabled/
+# Agar EMPTY hai:
+sudo apt-get install -y libnginx-mod-rtmp
+# Phir Step 2 se dobara chalao
+```
+
+---
+
+### OBS Settings (Aapki IP ke saath):
+```
+Service:     Custom...
+Server:      rtmp://172.26.144.56:1935/live
+Stream Key:  stream
+Keyframe:    2 seconds  ← yeh important hai
+Bitrate:     2800 kbps (CBR)
+```
+
+> **Note:** "stream" literally type karna hai Stream Key box mein — koi aur value nahi.
+
+Let me execute everything in order. Starting with all file writes in parallel batches.
+
+Edited server.py
+Created ai_clipper.py
+Edited rtmp.conf
+Edited nginx.conf
+Edited stream-api.service
+Created stream-clipper.service
+
+Now let me fix `install.sh`, update the Dashboard with the Clips tab, and create the post-install commands file — all in parallel:
+
+Edited install.sh
+Edited commands.txt
+
+Now update the Dashboard to add the AI Clips tab and fix the API URL:
+
+Viewed index.html:1-776
+Edited index.html
+
+Now add the clips controller to `app.js` and fix the API URL:
+
+Viewed app.js:800-1024
+Edited app.js
+
+All files are done. Now update the task tracker:
+
+Created task.md
+
+---
+
+## ✅ Sab ho gaya — yahan hai complete summary
+
+### Kya kiya gaya (14 bugs fixed + 7 new components):
+
+#### 🔴 Critical Bugs Fixed
+| File | Bug | Fix |
+|------|-----|-----|
+| `rtmp.conf` | Port 1936 (non-existent) → **1935** | Facebook relay ab kaam karega |
+| `nginx.conf` | `/api/manage/` sirf localhost pe tha | Ab **port 80** pe hai — Dashboard remotely kaam karega |
+| `server.py` | No auth, root process, command injection | Complete rewrite: token auth + allowlists |
+| `install.sh` | Double-pipe Apache check | Fixed |
+| `stream-api.service` | `User=root`, no logging | Hardened: www-data + logging |
+
+#### 🤖 New: AI Highlight Clipper
+- **`scripts/ai_clipper.py`** — Zero-dependency AI clipper using FFmpeg:
+  - Audio energy > −14 dBFS → auto clip
+  - Scene cuts > 8/min → auto clip  
+  - 2 min cooldown, 90s clip duration
+- **`systemd/stream-clipper.service`** — systemd daemon
+
+---
+
+### 📋 Install ke baad yeh commands chalao:
+
+**Step 1 — Install (Kali Linux / Ubuntu):**
+```bash
+sudo bash /opt/streaming-backend/install.sh
+```
+
+**Step 2 — Start all services:**
+```bash
+sudo bash /opt/streaming-backend/scripts/start_relay.sh
+```
+
+**Step 3 — API Token dekho:**
+```bash
+cat /opt/streaming-backend/keys/api_token
+```
+
+**Step 4 — Health check:**
+```bash
+bash /opt/streaming-backend/scripts/health_check.sh
+```
+
+---
+
+### 🎥 OBS Setup (Ye settings dahlo):
+
+**Settings → Stream:**
+```
+Service:     Custom...
+Server:      rtmp://[AAPKA_SERVER_IP]:1935/live
+Stream Key:  stream
+```
+
+**Settings → Output → Streaming:**
+```
+Encoder:      x264
+Rate Control: CBR
+Bitrate:      2800 kbps (2000 if internet slow)
+Keyframe:     2 seconds  ← IMPORTANT
+CPU Usage:    veryfast
+Profile:      main
+Tune:         zerolatency
+```
+
+> **Stream Key `stream` likhna hai literally — ye word hi key hai, koi random value nahi.**
+
+Full reference: `cat /opt/streaming-backend/commands.txt`

@@ -42,12 +42,15 @@ mkdir -p "$LOG_DIR"
 
 # Validate required variables
 if [[ "${FB_STREAM_KEY}" == *"YOUR_FACEBOOK"* ]] || [[ -z "${FB_STREAM_KEY}" ]]; then
-    echo "[ERROR] FB_STREAM_KEY is not set in $KEYS_FILE" >&2
-    exit 1
+    echo "[NOTICE] FB_STREAM_KEY is not set. Relay to Facebook is disabled until key is provided."
+    echo "[NOTICE] Update keys via Dashboard or in keys/stream_keys.env"
+    # Sleep to prevent systemd rapid-restart log spam
+    sleep 3600
+    exit 0
 fi
 
-FACEBOOK_RTMPS_INGEST="${FB_RTMPS_URL}/${FB_STREAM_KEY}"
-SOURCE_URL="rtmp://127.0.0.1:1935/fbsink/stream"
+FACEBOOK_RTMPS_INGEST="${FB_RTMPS_URL}${FB_STREAM_KEY}"
+SOURCE_URL="rtmp://127.0.0.1:1985/live/stream"
 
 echo "[INFO] Starting Facebook RTMPS relay at $(date '+%Y-%m-%d %H:%M:%S')"
 echo "[INFO] Source : $SOURCE_URL"

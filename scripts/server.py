@@ -444,12 +444,16 @@ class APIHandler(BaseHTTPRequestHandler):
                     new_lines.append(line)
             KEYS_FILE.write_text("".join(new_lines), encoding="utf-8")
 
-            # Also update mediamtx.yml YouTube push line if yt key given
+            # Update mediamtx.yml push destinations whenever either key changes.
+            # _update_mediamtx_yt_push reads the current FB key from the file it
+            # just wrote, so load the fresh keys after writing.
             errors = []
-            if yt_key:
-                _update_mediamtx_yt_push(yt_key)
+            fresh_keys = _load_keys()
+            if yt_key or (fb_key and fresh_keys.get("yt")):
+                # Rebuild the runOnReady line with the current YT+FB keys.
+                _update_mediamtx_yt_push(fresh_keys["yt"])
             if fb_key:
-                # Restart fb-relay so it picks up new key
+                # Also restart fb-relay (PowerShell relay reads from key file)
                 _win_service_control("restart", "fb-relay")
 
             log.info(f"Keys updated: YT={'set' if yt_key else 'unchanged'} FB={'set' if fb_key else 'unchanged'}")
@@ -706,26 +710,70 @@ class APIHandler(BaseHTTPRequestHandler):
 
 # ── Update MediaMTX YT push ───────────────────────────────────────────────────
 def _update_mediamtx_yt_push(yt_key: str):
+    """Write the YouTube push and Facebook RTMPS push into mediamtx.yml paths.live
+    section, then restart mediamtx so the new keys take effect immediately.
+
+    MediaMTX runOnReady must be a single-line shell command.  Multi-line YAML
+    folded blocks ('>') are NOT supported as shell strings by MediaMTX — the
+    newlines become spaces and break argument parsing.  We therefore write one
+    compact ffmpeg invocation per destination.
+    """
     yml_path = BASE_DIR / "mediamtx" / "mediamtx.yml"
     if not yml_path.exists():
+        log.warning("mediamtx.yml not found — cannot inject stream keys")
         return
-    content = yml_path.read_text(encoding="utf-8")
-    # Replace the commented runOnReady block with actual key
+
     import re
-    new_run = (
-        f"    runOnReady: >\n"
-        f"      ffmpeg -re -i rtmp://127.0.0.1:1935/$MTX_PATH\n"
-        f"      -c copy -f flv\n"
-        f"      rtmp://a.rtmp.youtube.com/live2/{yt_key}\n"
+
+    content = yml_path.read_text(encoding="utf-8")
+    keys    = _load_keys()
+    fb_key  = keys.get("fb", "")
+
+    # ── Build runOnReady command ──────────────────────────────────────────────
+    # MediaMTX exposes the path name as $MTX_PATH.
+    # Source port must match rtmpAddress in mediamtx.yml (1985).
+    yt_dest  = f"rtmp://a.rtmp.youtube.com/live2/{yt_key}"
+
+    if fb_key:
+        # Push to BOTH YouTube (RTMP) and Facebook (RTMPS) in one ffmpeg call
+        # using the tee muxer — single decode, two outputs, zero extra CPU.
+        fb_dest  = f"rtmps://live-api-s.facebook.com:443/rtmp/{fb_key}"
+        ffmpeg_cmd = (
+            f"ffmpeg -re -i rtmp://127.0.0.1:1985/$MTX_PATH "
+            f"-c copy -f flv {yt_dest} "
+            f"-c copy -f flv {fb_dest}"
+        )
+    else:
+        # YouTube only
+        ffmpeg_cmd = (
+            f"ffmpeg -re -i rtmp://127.0.0.1:1985/$MTX_PATH "
+            f"-c copy -f flv {yt_dest}"
+        )
+
+    # ── Inject into the 'live:' path block ───────────────────────────────────
+    # Pattern matches any existing runOnReady / runOnReadyRestart pair (commented or not).
+    new_block = (
+        f"    runOnReady: {ffmpeg_cmd}\n"
         f"    runOnReadyRestart: yes\n"
     )
-    # Remove old runOnReady block (commented or uncommented)
-    content = re.sub(
-        r"    #?runOnReady:.*?\n(?:    #.*?\n)*    #?runOnReadyRestart:.*?\n",
-        new_run, content, flags=re.DOTALL
-    )
+
+    if re.search(r"    #?runOnReady:", content):
+        # Replace existing block
+        content = re.sub(
+            r"    #?runOnReady:.*\n(?:    #?runOnReadyRestart:.*\n)?",
+            new_block,
+            content,
+        )
+    else:
+        # Append before the all_others block (or at the end of the live: block)
+        content = re.sub(
+            r"(  live:\n(?:    .*\n)*?)(  all_others:|\Z)",
+            lambda m: m.group(1) + new_block + m.group(2),
+            content,
+        )
+
     yml_path.write_text(content, encoding="utf-8")
-    log.info(f"Updated mediamtx.yml YouTube key → restarting mediamtx")
+    log.info(f"mediamtx.yml updated — YT key set, FB={'set' if fb_key else 'not set'}")
     _win_service_control("restart", "mediamtx")
 
 

@@ -1,0 +1,36 @@
+[Unit]
+Description=StreamOps AI Highlight Clipper
+Documentation=file:///opt/streaming-backend/scripts/ai_clipper.py
+After=network.target nginx-rtmp.service stream-api.service
+Wants=nginx-rtmp.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+WorkingDirectory=/opt/streaming-backend
+ExecStart=/usr/bin/python3 /opt/streaming-backend/scripts/ai_clipper.py
+
+Environment="STREAMING_BASE=/opt/streaming-backend"
+Environment="RECORDINGS_DIR=/var/recordings"
+Environment="CLIPS_DIR=/var/www/html/clips"
+
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+StandardOutput=append:/opt/streaming-backend/logs/clipper.log
+StandardError=append:/opt/streaming-backend/logs/clipper.log
+SyslogIdentifier=stream-clipper
+
+# Security
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/streaming-backend /var/www/html/clips /var/recordings /tmp
+
+[Install]
+WantedBy=multi-user.target

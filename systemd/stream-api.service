@@ -1,0 +1,41 @@
+[Unit]
+Description=StreamOps Management API
+Documentation=file:///opt/streaming-backend/docs/setup_guide.md
+After=network.target nginx-rtmp.service
+Wants=network.target
+
+[Service]
+Type=simple
+
+# Run as dedicated streaming user, NOT root
+# Create with: useradd -r -s /sbin/nologin streaming
+# For now using www-data; change to streaming user after useradd
+User=www-data
+Group=www-data
+
+WorkingDirectory=/opt/streaming-backend
+ExecStart=/usr/bin/python3 /opt/streaming-backend/scripts/server.py
+
+Environment="STREAMING_BASE=/opt/streaming-backend"
+Environment="RECORDINGS_DIR=/var/recordings"
+Environment="CLIPS_DIR=/var/www/html/clips"
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Logging
+StandardOutput=append:/opt/streaming-backend/logs/api.log
+StandardError=append:/opt/streaming-backend/logs/api.log
+SyslogIdentifier=stream-api
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/streaming-backend /var/www/html/clips /var/recordings
+
+[Install]
+WantedBy=multi-user.target

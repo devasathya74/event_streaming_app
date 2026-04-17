@@ -57,7 +57,7 @@ if (-not $fbKey -or $fbKey.StartsWith("YOUR_")) {
     exit 0
 }
 
-$SourceUrl = "rtmp://127.0.0.1:1935/live"
+$SourceUrl = "rtmp://127.0.0.1:1985/live"
 $Dest      = "$fbRtmps$fbKey"
 
 Write-Log "Starting Facebook RTMPS relay"
