@@ -324,6 +324,13 @@ class APIHandler(BaseHTTPRequestHandler):
             _serve_static(self, CLIPS_DIR / path[7:]); return
         if path.startswith("/hls/"):
             _serve_static(self, HLS_DIR / path[5:]); return
+
+        # ── HLS reverse proxy (NO auth — public stream) ───────────────────────
+        # Transparently forwards /hls-proxy/<path> → http://127.0.0.1:8888/<path>
+        # So a single Cloudflare Tunnel on :3000 covers both dashboard + HLS stream.
+        if path.startswith("/hls-proxy/"):
+            return self._hls_proxy(path[len("/hls-proxy/"):], parsed.query)
+
         # Any non-API path → try to serve from dashboard dir (covers app.js, style.css, favicon.ico, etc.)
         if not path.startswith("/api/"):
             fname = path.lstrip("/")
@@ -494,10 +501,21 @@ class APIHandler(BaseHTTPRequestHandler):
 
     # ── GET /api/streams ──────────────────────────────────────────────────────
     def _handle_get_streams(self):
-        """Return active MediaMTX HLS paths via the MediaMTX v3 REST API."""
+        """Return active MediaMTX HLS paths via the MediaMTX v3 REST API.
+        Auto-detects external access (e.g. Cloudflare Tunnel) and returns
+        a /hls-proxy/ URL so the HLS stream is reachable from the internet."""
         import urllib.request as ureq, json as _json
-        host_hdr  = self.headers.get("Host", "")
-        server_ip = host_hdr.split(":")[0] if ":" in host_hdr else (host_hdr or "127.0.0.1")
+        host_hdr  = self.headers.get("Host", f"127.0.0.1:{PORT}")
+        host_only = host_hdr.split(":")[0]
+
+        # Detect if request is coming from outside the local network
+        _local_prefixes = ("127.", "192.168.", "10.", "172.16.", "172.17.",
+                            "172.18.", "172.19.", "172.2", "172.3", "localhost")
+        is_local = any(host_only.startswith(p) for p in _local_prefixes)
+
+        # Determine scheme: Cloudflare Tunnel always uses HTTPS
+        scheme = "http" if is_local else "https"
+
         try:
             with ureq.urlopen("http://127.0.0.1:9997/v3/paths/list", timeout=2) as r:
                 payload = _json.loads(r.read())
@@ -505,14 +523,41 @@ class APIHandler(BaseHTTPRequestHandler):
             for item in payload.get("items", []):
                 if item.get("ready", False):
                     name = item["name"]
-                    streams.append({
-                        "path":    name,
-                        "hls_url": f"http://{server_ip}:8888/{name}/index.m3u8",
-                    })
+                    if is_local:
+                        # Local access: point directly to MediaMTX HLS port
+                        hls_url = f"http://{host_only}:8888/{name}/index.m3u8"
+                    else:
+                        # External access (tunnel): route through /hls-proxy/
+                        hls_url = f"{scheme}://{host_hdr}/hls-proxy/{name}/index.m3u8"
+                    streams.append({"path": name, "hls_url": hls_url})
             return self._ok({"streams": streams, "count": len(streams)})
         except Exception as exc:
             log.warning(f"/api/streams: MediaMTX API unavailable: {exc}")
             return self._ok({"streams": [], "count": 0})
+
+    # ── HLS reverse proxy ─────────────────────────────────────────────────────
+    def _hls_proxy(self, hls_path: str, raw_qs: str):
+        """Forward GET /hls-proxy/<path> → http://127.0.0.1:8888/<path>.
+        Allows a single Cloudflare Tunnel URL to serve both UI and HLS stream."""
+        import urllib.request as _ur2
+        url = f"http://127.0.0.1:8888/{hls_path}"
+        if raw_qs:
+            url += "?" + raw_qs
+        try:
+            req = _ur2.Request(url, headers={"User-Agent": "StreamOps-HLS-Proxy/1.0"})
+            with _ur2.urlopen(req, timeout=10) as resp:
+                body  = resp.read()
+                ctype = resp.headers.get("Content-Type", "application/octet-stream")
+                self.send_response(200)
+                self.send_header("Content-Type",  ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin",  "*")
+                self.send_header("Access-Control-Allow-Headers", "*")
+                self.send_header("Cache-Control",  "no-cache, no-store")
+                self.end_headers()
+                self.wfile.write(body)
+        except Exception as e:
+            self._err(502, f"HLS proxy error: {e}")
 
 
     # ── GET /api/clips ────────────────────────────────────────────────────────
